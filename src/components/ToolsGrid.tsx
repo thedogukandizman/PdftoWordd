@@ -1,4 +1,3 @@
-
 import { 
   Combine, 
   FileText, 
@@ -10,36 +9,36 @@ const tools = [
   {
     icon: Combine,
     title: "Merge PDFs Instantly",
-    description: "Combine 2 files free — unlimited merges for $1.99.",
+    description: "Combine unlimited files — 100% free, no limits.",
     color: "bg-blue-100",
     iconColor: "text-blue-600",
     buttonText: "Start Merge →",
     buttonColor: "text-blue-600",
-    badge: "free for small jobs",
+    badge: "fully free",
     badgeColor: "bg-green-500",
     href: "/merge-pdf"
   },
   {
     icon: FileText,
     title: "Convert to Word — Without Losing Formatting",
-    description: "Convert first 5 pages free. Pay once to unlock full conversion.",
+    description: "Convert any number of pages — 100% free, no paywalls.",
     color: "bg-purple-100",
     iconColor: "text-purple-600",
     buttonText: "Convert PDF →",
     buttonColor: "text-purple-600",
-    badge: "",
-    badgeColor: "",
+    badge: "fully free",
+    badgeColor: "bg-green-500",
     href: "/pdf-to-word"
   },
   {
     icon: MessageSquare,
     title: "Ask Questions About Any PDF",
-    description: "Upload a document and ask 3 free questions. Unlimited answers for $4.99.",
+    description: "Upload a document and ask unlimited questions — 100% free, no limits.",
     color: "bg-orange-100",
     iconColor: "text-orange-600",
     buttonText: "Start Chat →",
     buttonColor: "text-orange-600",
-    badge: "no account needed",
+    badge: "fully free",
     badgeColor: "bg-green-500",
     href: "/chat-with-pdf"
   }

@@ -11,12 +11,15 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     react(),
-    mode === 'development' &&
-    componentTagger(),
+    mode === 'development' && componentTagger(),
   ].filter(Boolean),
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  define: {
+    'process.env.NODE_ENV': '"production"',
+  },
+  base: '/PdftoWordd/', // ✅ This must match your GitHub repo name exactly
 }));

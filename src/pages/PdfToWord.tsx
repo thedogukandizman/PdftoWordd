@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
@@ -6,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Upload, Download, FileText, X } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { convertPdfToWord } from '@/utils/pdfToWord';
+import { Helmet } from 'react-helmet-async';
 
 const PdfToWord = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -49,7 +50,7 @@ const PdfToWord = () => {
     }
   };
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     
     if (file && file.type !== 'application/pdf') {
@@ -64,10 +65,20 @@ const PdfToWord = () => {
     if (file) {
       setSelectedFile(file);
       console.log('File selected:', file.name, file.size);
-      toast({
-        title: "File uploaded!",
-        description: "PDF file ready for conversion",
-      });
+      
+      try {
+        await convertPdfToWord(file);
+        toast({
+          title: "Success!",
+          description: "PDF converted and downloaded successfully"
+        });
+      } catch (error: any) {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive"
+        });
+      }
     }
   };
 
@@ -121,9 +132,6 @@ For best results with PDF to Word conversion:
       // Fallback to pdfjs-dist with correct worker version
       try {
         const pdfjsLib = await import('pdfjs-dist');
-        
-        // Set worker source to match the pdfjs-dist version
-        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js`;
         
         const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
         const pdf = await loadingTask.promise;
@@ -195,44 +203,7 @@ ${text.split('\n').map(line => {
     try {
       console.log('Starting conversion for:', selectedFile.name);
       
-      // Create FormData for the Edge Function
-      const formData = new FormData();
-      formData.append('pdf', selectedFile);
-
-      // Call the Edge Function
-      const { data, error } = await supabase.functions.invoke('pdf-to-word', {
-        body: formData,
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      if (!data.success) {
-        throw new Error(data.error);
-      }
-
-      // Convert base64 to blob
-      const binaryString = atob(data.wordDocument);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      
-      const blob = new Blob([bytes], { 
-        type: data.contentType || 'application/rtf'
-      });
-      
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = data.filename || `${selectedFile.name.replace('.pdf', '')}_converted.rtf`;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      await convertPdfToWord(selectedFile);
       
       toast({
         title: "Success!",
@@ -252,108 +223,125 @@ ${text.split('\n').map(line => {
   };
 
   return (
-    <div className="min-h-screen bg-white">
-      <Header />
-      <div className="container mx-auto px-4 py-20">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-12">
-            <h1 className="text-4xl md:text-5xl font-bold text-gray-800 mb-4">
-              PDF to Word Converter
-            </h1>
-            <p className="text-xl text-gray-600">
-              Convert PDF documents to editable Word files with enhanced text extraction
-            </p>
-          </div>
-
-          <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
-            <div className="mb-6">
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-                <div className="flex justify-between items-center text-sm">
-                  <div>
-                    <span className="text-green-600 font-medium">Enhanced PDF Processing</span>
-                    <p className="text-gray-600">Using pdf-parse and pdfjs-dist for superior text extraction</p>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-gray-600">File: {selectedFile ? '✓ Ready' : 'None'}</div>
-                  </div>
-                </div>
-              </div>
-
-              <label className="block text-gray-700 text-sm font-medium mb-2">
-                Select PDF File to Convert
-              </label>
-              <div 
-                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                  isDragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
-                }`}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-              >
-                <Upload className="h-12 w-12 text-blue-600 mx-auto mb-4" />
-                <p className="text-gray-600 mb-4">Drop a PDF file here or click to browse</p>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                  id="pdf-file"
-                />
-                <Button 
-                  variant="outline" 
-                  className="border-gray-300 text-gray-700 hover:bg-gray-50"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  Choose PDF File
-                </Button>
-              </div>
+    <>
+      <Helmet>
+        <title>PDF to Word Converter – Free, Private, Instant | WhatAPDF</title>
+        <meta name="description" content="Convert PDF to Word instantly and securely in your browser. No uploads, no signups, 100% free. Powered by AI. whatapdf.info" />
+        <meta name="keywords" content="PDF to Word, convert PDF, PDF converter, free PDF, private PDF, online PDF, WhatAPDF, AI PDF tools" />
+        <link rel="canonical" href="https://whatapdf.info/pdf-to-word" />
+        <meta property="og:title" content="PDF to Word Converter – Free, Private, Instant | WhatAPDF" />
+        <meta property="og:description" content="Convert PDF to Word instantly and securely in your browser. No uploads, no signups, 100% free. Powered by AI. whatapdf.info" />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://whatapdf.info/pdf-to-word" />
+        <meta property="og:image" content="https://whatapdf.info/og-image.png" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="PDF to Word Converter – Free, Private, Instant | WhatAPDF" />
+        <meta name="twitter:description" content="Convert PDF to Word instantly and securely in your browser. No uploads, no signups, 100% free. Powered by AI. whatapdf.info" />
+        <meta name="twitter:image" content="https://whatapdf.info/og-image.png" />
+      </Helmet>
+      <div className="min-h-screen bg-white">
+        <Header />
+        <div className="container mx-auto px-4 py-20">
+          <div className="max-w-4xl mx-auto">
+            <div className="text-center mb-12">
+              <h1 className="text-4xl md:text-5xl font-bold text-gray-800 mb-4">
+                PDF to Word Converter
+              </h1>
+              <p className="text-xl text-gray-600">
+                Convert PDF documents to editable Word files with enhanced text extraction
+              </p>
             </div>
 
-            {selectedFile && (
+            <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
               <div className="mb-6">
-                <h3 className="text-gray-700 font-medium mb-3">Selected File:</h3>
-                <div className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
-                  <div className="flex items-center space-x-3">
-                    <FileText className="h-5 w-5 text-blue-600" />
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+                  <div className="flex justify-between items-center text-sm">
                     <div>
-                      <span className="text-gray-800 text-sm block">{selectedFile.name}</span>
-                      <span className="text-gray-500 text-xs">
-                        ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
-                      </span>
+                      <span className="text-green-600 font-medium">Enhanced PDF Processing</span>
+                      <p className="text-gray-600">Using pdf-parse and pdfjs-dist for superior text extraction</p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-gray-600">File: {selectedFile ? '✓ Ready' : 'None'}</div>
                     </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={removeFile}
-                    className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                </div>
+
+                <label className="block text-gray-700 text-sm font-medium mb-2">
+                  Select PDF File to Convert
+                </label>
+                <div 
+                  className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                    isDragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+                  }`}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                >
+                  <Upload className="h-12 w-12 text-blue-600 mx-auto mb-4" />
+                  <p className="text-gray-600 mb-4">Drop a PDF file here or click to browse</p>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    id="pdf-file"
+                  />
+                  <Button 
+                    variant="outline" 
+                    className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                    onClick={() => fileInputRef.current?.click()}
                   >
-                    <X className="h-4 w-4" />
+                    Choose PDF File
                   </Button>
                 </div>
               </div>
-            )}
 
-            <Button
-              onClick={handleConvert}
-              disabled={!selectedFile || isProcessing}
-              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 py-6 text-xl font-semibold"
-            >
-              {isProcessing ? (
-                "Converting to Word..."
-              ) : (
-                <>
-                  <Download className="mr-2 h-5 w-5" />
-                  Convert PDF
-                </>
+              {selectedFile && (
+                <div className="mb-6">
+                  <h3 className="text-gray-700 font-medium mb-3">Selected File:</h3>
+                  <div className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
+                    <div className="flex items-center space-x-3">
+                      <FileText className="h-5 w-5 text-blue-600" />
+                      <div>
+                        <span className="text-gray-800 text-sm block">{selectedFile.name}</span>
+                        <span className="text-gray-500 text-xs">
+                          ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+                        </span>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={removeFile}
+                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
               )}
-            </Button>
+
+              <Button
+                onClick={handleConvert}
+                disabled={!selectedFile || isProcessing}
+                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 py-6 text-xl font-semibold"
+              >
+                {isProcessing ? (
+                  "Converting to Word..."
+                ) : (
+                  <>
+                    <Download className="mr-2 h-5 w-5" />
+                    Convert PDF
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
+        <Footer />
       </div>
-      <Footer />
-    </div>
+    </>
   );
 };
 
