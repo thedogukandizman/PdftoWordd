@@ -15,13 +15,7 @@ export const Hero = () => {
       <div className="container mx-auto text-center">
         <div className="max-w-4xl mx-auto">
           <h1 className="text-5xl md:text-6xl font-bold text-gray-800 mb-6 leading-tight">
-            <span className="bg-blue-600 text-white px-4 py-2 rounded-lg inline-block mb-4">
-              Fix Your PDF Instantly — No
-            </span>
-            <br />
-            <span className="bg-blue-600 text-white px-4 py-2 rounded-lg inline-block">
-              Signups, No Limits
-            </span>
+            Fix Your PDF Instantly — No Signups, No Limits
           </h1>
           
           <div className="bg-blue-600 text-white px-6 py-3 rounded-lg inline-block mb-8">

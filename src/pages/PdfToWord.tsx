@@ -11,6 +11,7 @@ const PdfToWord = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [fileUploaded, setFileUploaded] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -39,7 +40,14 @@ const PdfToWord = () => {
       return;
     }
     
-    setSelectedFile(file || null);
+    if (file) {
+      setSelectedFile(file);
+      setFileUploaded(true);
+      toast({
+        title: "File uploaded!",
+        description: "PDF file ready for conversion",
+      });
+    }
   };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -54,11 +62,19 @@ const PdfToWord = () => {
       return;
     }
     
-    setSelectedFile(file || null);
+    if (file) {
+      setSelectedFile(file);
+      setFileUploaded(true);
+      toast({
+        title: "File uploaded!",
+        description: "PDF file ready for conversion",
+      });
+    }
   };
 
   const removeFile = () => {
     setSelectedFile(null);
+    setFileUploaded(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -69,25 +85,22 @@ const PdfToWord = () => {
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await PDFDocument.load(arrayBuffer);
       
-      // Enhanced text extraction simulation
       const pageCount = pdf.getPageCount();
       let extractedText = `Document: ${file.name}\n`;
       extractedText += `Total Pages: ${pageCount}\n`;
       extractedText += `Conversion Date: ${new Date().toLocaleDateString()}\n`;
       extractedText += `File Size: ${(file.size / 1024 / 1024).toFixed(2)} MB\n\n`;
       
-      // Simulate extracted content for each page
-      for (let i = 1; i <= Math.min(pageCount, 5); i++) {
+      // Note: This is a simplified text extraction for demo purposes
+      // Real implementation would use libraries like pdf-parse or pdf2pic with OCR
+      for (let i = 1; i <= Math.min(pageCount, 10); i++) {
         extractedText += `=== PAGE ${i} ===\n\n`;
-        extractedText += `This is simulated text content from page ${i} of your PDF document. `;
-        extractedText += `In a real implementation, this would contain the actual text extracted from the PDF, `;
-        extractedText += `including paragraphs, headings, bullet points, and other formatted content.\n\n`;
-        extractedText += `Sample paragraph content would appear here with proper spacing and formatting. `;
-        extractedText += `Tables, lists, and other structured content would be preserved as much as possible.\n\n`;
+        extractedText += `[Note: This is a demo version. Real PDF text extraction would appear here.]\n`;
+        extractedText += `Page ${i} content would be extracted and formatted for Word document.\n\n`;
       }
       
-      if (pageCount > 5) {
-        extractedText += `\n[NOTE: This demo version only processes the first 5 pages. The full document has ${pageCount} pages.]\n`;
+      if (pageCount > 10) {
+        extractedText += `\n[NOTE: Demo version processes first 10 pages. Full document has ${pageCount} pages.]\n`;
       }
       
       return extractedText;
@@ -97,7 +110,7 @@ const PdfToWord = () => {
   };
 
   const handleConvert = async () => {
-    if (!selectedFile) {
+    if (!selectedFile || !fileUploaded) {
       toast({
         title: "No file selected",
         description: "Please select a PDF file to convert",
@@ -111,19 +124,15 @@ const PdfToWord = () => {
     try {
       const extractedText = await extractTextFromPdf(selectedFile);
       
-      // Create a proper RTF document with better formatting
-      const rtfContent = `{\\rtf1\\ansi\\deff0
-{\\fonttbl
-{\\f0 Times New Roman;}
-{\\f1 Arial;}
-}
-{\\colortbl;\\red0\\green0\\blue0;\\red0\\green0\\blue255;}
-\\f0\\fs24
-\\b\\fs28 PDF to Word Conversion\\b0\\fs24\\par
-\\par
-${extractedText.replace(/\n/g, '\\par ')}}`;
+      // Create RTF content with better formatting
+      const rtfHeader = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Times New Roman;}{\\f1 Arial;}}`;
+      const rtfBody = `\\f0\\fs24\\b PDF to Word Conversion Result\\b0\\par\\par`;
+      const rtfContent = extractedText.replace(/\n/g, '\\par ');
+      const rtfFooter = `}`;
       
-      const blob = new Blob([rtfContent], { 
+      const fullRtfContent = rtfHeader + rtfBody + rtfContent + rtfFooter;
+      
+      const blob = new Blob([fullRtfContent], { 
         type: 'application/rtf' 
       });
       
@@ -135,7 +144,6 @@ ${extractedText.replace(/\n/g, '\\par ')}}`;
       document.body.appendChild(a);
       a.click();
       
-      // Clean up
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
@@ -144,8 +152,8 @@ ${extractedText.replace(/\n/g, '\\par ')}}`;
         description: "Your PDF has been converted to Word format (RTF)"
       });
       
-      // Reset the form
       setSelectedFile(null);
+      setFileUploaded(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -181,11 +189,11 @@ ${extractedText.replace(/\n/g, '\\par ')}}`;
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
                 <div className="flex justify-between items-center text-sm">
                   <div>
-                    <span className="text-blue-600 font-medium">Free Tier</span>
-                    <p className="text-gray-600">Convert up to 5 pages per document • Max 3MB file size • 1 conversion per session</p>
+                    <span className="text-blue-600 font-medium">Demo Version</span>
+                    <p className="text-gray-600">Converts basic text • Max 10 pages • RTF format output</p>
                   </div>
                   <div className="text-right">
-                    <div className="text-gray-600">Conversions used: 0/1</div>
+                    <div className="text-gray-600">Status: {fileUploaded ? 'Ready' : 'No file'}</div>
                   </div>
                 </div>
               </div>
@@ -226,7 +234,9 @@ ${extractedText.replace(/\n/g, '\\par ')}}`;
 
             {selectedFile && (
               <div className="mb-6">
-                <h3 className="text-gray-700 font-medium mb-3">Selected File:</h3>
+                <h3 className="text-gray-700 font-medium mb-3">
+                  {fileUploaded ? '✓ File uploaded and ready:' : 'Selected File:'}
+                </h3>
                 <div className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
                   <div className="flex items-center space-x-3">
                     <FileText className="h-5 w-5 text-blue-600" />
@@ -251,7 +261,7 @@ ${extractedText.replace(/\n/g, '\\par ')}}`;
 
             <Button
               onClick={handleConvert}
-              disabled={!selectedFile || isProcessing}
+              disabled={!selectedFile || !fileUploaded || isProcessing}
               className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 py-3 text-lg"
             >
               {isProcessing ? (

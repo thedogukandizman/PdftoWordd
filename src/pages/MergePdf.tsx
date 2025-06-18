@@ -11,6 +11,7 @@ const MergePdf = () => {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [filesUploaded, setFilesUploaded] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -38,7 +39,14 @@ const MergePdf = () => {
       });
     }
     
-    setSelectedFiles(prev => [...prev, ...pdfFiles]);
+    if (pdfFiles.length > 0) {
+      setSelectedFiles(prev => [...prev, ...pdfFiles]);
+      setFilesUploaded(true);
+      toast({
+        title: "Files uploaded!",
+        description: `${pdfFiles.length} PDF files added successfully`,
+      });
+    }
   };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -53,11 +61,24 @@ const MergePdf = () => {
       });
     }
     
-    setSelectedFiles(prev => [...prev, ...pdfFiles]);
+    if (pdfFiles.length > 0) {
+      setSelectedFiles(prev => [...prev, ...pdfFiles]);
+      setFilesUploaded(true);
+      toast({
+        title: "Files uploaded!",
+        description: `${pdfFiles.length} PDF files added successfully`,
+      });
+    }
   };
 
   const removeFile = (index: number) => {
-    setSelectedFiles(files => files.filter((_, i) => i !== index));
+    setSelectedFiles(files => {
+      const newFiles = files.filter((_, i) => i !== index);
+      if (newFiles.length === 0) {
+        setFilesUploaded(false);
+      }
+      return newFiles;
+    });
   };
 
   const handleMerge = async () => {
@@ -73,10 +94,8 @@ const MergePdf = () => {
     setIsProcessing(true);
     
     try {
-      // Create a new PDF document
       const mergedPdf = await PDFDocument.create();
 
-      // Process each file
       for (const file of selectedFiles) {
         try {
           const arrayBuffer = await file.arrayBuffer();
@@ -95,16 +114,8 @@ const MergePdf = () => {
         }
       }
 
-      // Save the merged PDF with proper metadata
-      const pdfBytes = await mergedPdf.save({
-        useObjectStreams: false,
-        addDefaultPage: false
-      });
-
-      // Create and download the file
-      const blob = new Blob([pdfBytes], { 
-        type: 'application/pdf' 
-      });
+      const pdfBytes = await mergedPdf.save();
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -114,7 +125,6 @@ const MergePdf = () => {
       document.body.appendChild(a);
       a.click();
       
-      // Clean up
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
@@ -123,8 +133,8 @@ const MergePdf = () => {
         description: "Your PDFs have been merged successfully"
       });
       
-      // Reset the form
       setSelectedFiles([]);
+      setFilesUploaded(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -194,7 +204,9 @@ const MergePdf = () => {
 
             {selectedFiles.length > 0 && (
               <div className="mb-6">
-                <h3 className="text-gray-700 font-medium mb-3">Selected Files ({selectedFiles.length}):</h3>
+                <h3 className="text-gray-700 font-medium mb-3">
+                  {filesUploaded ? `✓ ${selectedFiles.length} files uploaded` : `Selected Files (${selectedFiles.length}):`}
+                </h3>
                 <div className="space-y-2">
                   {selectedFiles.map((file, index) => (
                     <div key={index} className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
@@ -223,7 +235,7 @@ const MergePdf = () => {
 
             <Button
               onClick={handleMerge}
-              disabled={selectedFiles.length < 2 || isProcessing}
+              disabled={selectedFiles.length < 2 || isProcessing || !filesUploaded}
               className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 py-3 text-lg"
             >
               {isProcessing ? (
