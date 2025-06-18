@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
@@ -77,6 +76,29 @@ const PdfToWord = () => {
     }
   };
 
+  const createFallbackText = (file: File): string => {
+    return `${file.name.replace('.pdf', '').replace(/_/g, ' ')}
+
+Document Information:
+Author: ${file.name.includes('_') ? file.name.split('_')[0] : 'Unknown'}
+Pages: Multiple
+File Size: ${(file.size / 1024 / 1024).toFixed(2)} MB
+Created: ${new Date(file.lastModified || Date.now()).toLocaleDateString()}
+Converted: ${new Date().toLocaleDateString()}
+
+PAGE 1
+________________________________________
+
+This document contains content from your PDF file. The text extraction process encountered some limitations, but the document structure has been preserved.
+
+For best results with PDF to Word conversion:
+- Ensure your PDF contains selectable text (not just images)
+- PDFs with complex layouts may require manual formatting adjustments
+- Scanned documents may need OCR processing for text extraction
+
+[Note: This is a fallback message. The actual PDF content would appear here with proper text extraction.]`;
+  };
+
   const extractTextFromPdf = async (file: File): Promise<string> => {
     try {
       const arrayBuffer = await file.arrayBuffer();
@@ -126,35 +148,12 @@ const PdfToWord = () => {
       }
       
       // Enhanced fallback
-      return this.createFallbackText(file);
+      return createFallbackText(file);
       
     } catch (error) {
       console.error('PDF parsing error:', error);
-      return this.createFallbackText(file);
+      return createFallbackText(file);
     }
-  };
-
-  const createFallbackText = (file: File): string => {
-    return `${file.name.replace('.pdf', '').replace(/_/g, ' ')}
-
-Document Information:
-Author: ${file.name.includes('_') ? file.name.split('_')[0] : 'Unknown'}
-Pages: Multiple
-File Size: ${(file.size / 1024 / 1024).toFixed(2)} MB
-Created: ${new Date(file.lastModified || Date.now()).toLocaleDateString()}
-Converted: ${new Date().toLocaleDateString()}
-
-PAGE 1
-________________________________________
-
-This document contains content from your PDF file. The text extraction process encountered some limitations, but the document structure has been preserved.
-
-For best results with PDF to Word conversion:
-- Ensure your PDF contains selectable text (not just images)
-- PDFs with complex layouts may require manual formatting adjustments
-- Scanned documents may need OCR processing for text extraction
-
-[Note: This is a fallback message. The actual PDF content would appear here with proper text extraction.]`;
   };
 
   const createWordDocument = (text: string, filename: string): Blob => {
