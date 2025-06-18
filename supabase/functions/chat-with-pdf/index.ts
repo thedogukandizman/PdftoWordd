@@ -15,10 +15,35 @@ serve(async (req) => {
   }
 
   try {
+    // Check if Gemini API key is available
+    if (!geminiApiKey) {
+      console.error('GEMINI_API_KEY not found in environment variables');
+      return new Response(JSON.stringify({ 
+        error: 'AI service is not properly configured. Please contact support.' 
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const { pdfContent, userQuestion } = await req.json();
 
-    if (!pdfContent || !userQuestion) {
-      throw new Error('PDF content and user question are required');
+    if (!userQuestion || userQuestion.trim().length === 0) {
+      return new Response(JSON.stringify({ 
+        error: 'Please provide a question to ask about the PDF.' 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (!pdfContent || pdfContent.trim().length < 10) {
+      return new Response(JSON.stringify({ 
+        error: 'PDF content is empty or too short. Please upload a PDF with extractable text and try again.' 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     console.log('Processing chat request, PDF content length:', pdfContent.length, 'Question:', userQuestion);
@@ -33,13 +58,13 @@ serve(async (req) => {
           {
             parts: [
               {
-                text: `You are an AI assistant helping users understand their PDF documents. Here is the complete content of the PDF document:
+                text: `You are an AI assistant helping users understand their PDF documents. Here is the content extracted from a PDF document:
 
-${pdfContent}
+${pdfContent.substring(0, 30000)} ${pdfContent.length > 30000 ? '...[content truncated]' : ''}
 
 User Question: ${userQuestion}
 
-Please provide a helpful and accurate answer based solely on the content of the PDF document above. If the answer cannot be found in the document, please say so clearly.`
+Please provide a helpful and accurate answer based on the PDF content above. If the answer cannot be found in the document, please say so clearly. Keep your response concise and relevant.`
               }
             ]
           }
@@ -52,13 +77,45 @@ Please provide a helpful and accurate answer based solely on the content of the 
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      console.error('Gemini API Error:', errorData);
-      throw new Error(`Gemini API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
+      const errorData = await response.json().catch(() => ({ error: { message: 'Unknown error' } }));
+      console.error('Gemini API Error:', response.status, errorData);
+      
+      if (response.status === 400) {
+        return new Response(JSON.stringify({ 
+          error: 'The question or PDF content contains unsupported content. Please try rephrasing your question.' 
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } else if (response.status === 403) {
+        return new Response(JSON.stringify({ 
+          error: 'AI service access denied. Please check your API configuration.' 
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } else {
+        return new Response(JSON.stringify({ 
+          error: 'AI service is temporarily unavailable. Please try again in a moment.' 
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     const data = await response.json();
-    const aiResponse = data.candidates[0]?.content?.parts[0]?.text || 'No response generated';
+    const aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!aiResponse) {
+      console.error('No response generated from Gemini API:', data);
+      return new Response(JSON.stringify({ 
+        error: 'AI service did not generate a response. Please try rephrasing your question.' 
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     console.log('AI response generated successfully');
 
@@ -72,7 +129,9 @@ Please provide a helpful and accurate answer based solely on the content of the 
   } catch (error) {
     console.error('Error in chat-with-pdf function:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: `Chat service error: ${error.message}. Please try again or contact support if the problem persists.`
+      }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

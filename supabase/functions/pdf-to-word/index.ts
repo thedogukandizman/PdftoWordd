@@ -22,127 +22,87 @@ serve(async (req) => {
 
     console.log('Processing PDF:', pdfFile.name, 'Size:', pdfFile.size);
 
-    // Convert file to base64 for Python processing
+    // Extract text using the same method as extract-pdf-text
     const arrayBuffer = await pdfFile.arrayBuffer();
-    const base64Pdf = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-
-    // Python script for PDF to Word conversion using PyMuPDF and python-docx
-    const pythonScript = `
-import fitz  # PyMuPDF
-import base64
-import io
-from docx import Document
-from docx.shared import Inches
-import sys
-import json
-
-def pdf_to_word(base64_pdf):
-    try:
-        # Decode base64 PDF
-        pdf_bytes = base64.b64decode(base64_pdf)
-        
-        # Open PDF with PyMuPDF
-        pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")
-        
-        # Create new Word document
-        doc = Document()
-        
-        # Add title
-        title = doc.add_heading('Converted PDF Document', 0)
-        
-        # Extract text from each page
-        for page_num in range(len(pdf_document)):
-            page = pdf_document.load_page(page_num)
-            text = page.get_text()
-            
-            if text.strip():
-                # Add page heading
-                doc.add_heading(f'Page {page_num + 1}', level=1)
-                
-                # Add page content
-                paragraphs = text.split('\\n\\n')
-                for paragraph in paragraphs:
-                    if paragraph.strip():
-                        doc.add_paragraph(paragraph.strip())
-            else:
-                doc.add_paragraph(f'[Page {page_num + 1} contains no extractable text]')
-        
-        # Save to bytes
-        docx_buffer = io.BytesIO()
-        doc.save(docx_buffer)
-        docx_bytes = docx_buffer.getvalue()
-        
-        # Convert to base64 for return
-        docx_base64 = base64.b64encode(docx_bytes).decode('utf-8')
-        
-        pdf_document.close()
-        
-        return {
-            'success': True,
-            'docx_base64': docx_base64,
-            'pages_processed': len(pdf_document)
-        }
-        
-    except Exception as e:
-        return {
-            'success': False,
-            'error': str(e)
-        }
-
-# Get input from stdin
-input_data = sys.stdin.read()
-data = json.loads(input_data)
-result = pdf_to_word(data['base64_pdf'])
-print(json.dumps(result))
-`;
-
-    // Execute Python script
-    const process = new Deno.Command("python3", {
-      args: ["-c", pythonScript],
-      stdin: "piped",
-      stdout: "piped",
-      stderr: "piped",
-    });
-
-    const child = process.spawn();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    const decoder = new TextDecoder('utf-8', { fatal: false });
+    let rawText = decoder.decode(uint8Array);
     
-    // Send input to Python
-    const writer = child.stdin.getWriter();
-    await writer.write(new TextEncoder().encode(JSON.stringify({ base64_pdf: base64Pdf })));
-    await writer.close();
-
-    // Get output
-    const { code, stdout, stderr } = await child.output();
-
-    if (code !== 0) {
-      const errorText = new TextDecoder().decode(stderr);
-      console.error('Python script error:', errorText);
-      throw new Error(`PDF processing failed: ${errorText}`);
+    // Extract text between stream objects
+    let extractedText = '';
+    const streamRegex = /stream\s*(.*?)\s*endstream/gs;
+    const matches = rawText.matchAll(streamRegex);
+    
+    for (const match of matches) {
+      const streamContent = match[1];
+      const textMatch = streamContent.match(/\((.*?)\)/g);
+      if (textMatch) {
+        textMatch.forEach(text => {
+          const cleanText = text.replace(/[()]/g, '').trim();
+          if (cleanText.length > 2 && /[a-zA-Z]/.test(cleanText)) {
+            extractedText += cleanText + ' ';
+          }
+        });
+      }
     }
 
-    const result = JSON.parse(new TextDecoder().decode(stdout));
-    
-    if (!result.success) {
-      throw new Error(result.error);
+    // Fallback text extraction
+    if (!extractedText.trim()) {
+      const textRegex = /\((.*?)\)/g;
+      const allMatches = rawText.matchAll(textRegex);
+      
+      for (const match of allMatches) {
+        const text = match[1];
+        if (text && text.length > 2 && /[a-zA-Z]/.test(text)) {
+          extractedText += text + ' ';
+        }
+      }
     }
 
-    console.log('PDF processed successfully, pages:', result.pages_processed);
+    // Clean up the extracted text
+    extractedText = extractedText
+      .replace(/\s+/g, ' ')
+      .replace(/[^\x20-\x7E]/g, ' ')
+      .trim();
 
-    // Convert base64 back to binary for download
-    const docxBytes = Uint8Array.from(atob(result.docx_base64), c => c.charCodeAt(0));
+    if (!extractedText || extractedText.length < 10) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: "Could not extract readable text from this PDF. The file might be a scanned image or contain non-selectable text. Please try a different PDF."
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
-    return new Response(docxBytes, {
+    // Create a simple Word document structure (RTF format that works with .docx extension)
+    const rtfContent = `{\\rtf1\\ansi\\deff0 {\\fonttbl {\\f0 Times New Roman;}}
+\\f0\\fs24 ${extractedText.replace(/\n/g, '\\par ')}}`;
+
+    // Convert to base64 for download
+    const wordBuffer = new TextEncoder().encode(rtfContent);
+    const base64Word = btoa(String.fromCharCode(...wordBuffer));
+
+    console.log('Document conversion completed successfully');
+
+    return new Response(JSON.stringify({
+      success: true,
+      wordDocument: base64Word,
+      filename: pdfFile.name.replace('.pdf', '.docx')
+    }), {
       headers: {
         ...corsHeaders,
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'Content-Disposition': `attachment; filename="${pdfFile.name.replace('.pdf', '')}_converted.docx"`,
+        'Content-Type': 'application/json',
       },
     });
 
   } catch (error) {
     console.error('Error in pdf-to-word function:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        success: false,
+        error: `Conversion failed: ${error.message}. Please ensure the file is a valid PDF.`
+      }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

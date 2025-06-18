@@ -22,95 +22,77 @@ serve(async (req) => {
 
     console.log('Extracting text from PDF:', pdfFile.name, 'Size:', pdfFile.size);
 
-    // Convert file to base64 for Python processing
+    // Convert file to ArrayBuffer for processing
     const arrayBuffer = await pdfFile.arrayBuffer();
-    const base64Pdf = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-
-    // Python script for text extraction using PyMuPDF
-    const pythonScript = `
-import fitz  # PyMuPDF
-import base64
-import sys
-import json
-
-def extract_pdf_text(base64_pdf):
-    try:
-        # Decode base64 PDF
-        pdf_bytes = base64.b64decode(base64_pdf)
-        
-        # Open PDF with PyMuPDF
-        pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")
-        
-        full_text = ""
-        metadata = {
-            'title': pdf_document.metadata.get('title', ''),
-            'author': pdf_document.metadata.get('author', ''),
-            'subject': pdf_document.metadata.get('subject', ''),
-            'creator': pdf_document.metadata.get('creator', ''),
-            'producer': pdf_document.metadata.get('producer', ''),
-            'page_count': len(pdf_document)
-        }
-        
-        # Extract text from each page
-        for page_num in range(len(pdf_document)):
-            page = pdf_document.load_page(page_num)
-            text = page.get_text()
-            
-            if text.strip():
-                full_text += f"\\n\\nPage {page_num + 1}:\\n{'='*40}\\n{text}"
-            else:
-                full_text += f"\\n\\nPage {page_num + 1}:\\n{'='*40}\\n[No extractable text on this page]"
-        
-        pdf_document.close()
-        
-        return {
-            'success': True,
-            'text': full_text.strip(),
-            'metadata': metadata
-        }
-        
-    except Exception as e:
-        return {
-            'success': False,
-            'error': str(e)
-        }
-
-# Get input from stdin
-input_data = sys.stdin.read()
-data = json.loads(input_data)
-result = extract_pdf_text(data['base64_pdf'])
-print(json.dumps(result))
-`;
-
-    // Execute Python script
-    const process = new Deno.Command("python3", {
-      args: ["-c", pythonScript],
-      stdin: "piped",
-      stdout: "piped",
-      stderr: "piped",
-    });
-
-    const child = process.spawn();
     
-    // Send input to Python
-    const writer = child.stdin.getWriter();
-    await writer.write(new TextEncoder().encode(JSON.stringify({ base64_pdf: base64Pdf })));
-    await writer.close();
-
-    // Get output
-    const { code, stdout, stderr } = await child.output();
-
-    if (code !== 0) {
-      const errorText = new TextDecoder().decode(stderr);
-      console.error('Python script error:', errorText);
-      throw new Error(`Text extraction failed: ${errorText}`);
+    // Simple PDF text extraction using basic PDF parsing
+    // This is a simplified approach - for production, you'd want to use a proper PDF parsing library
+    const uint8Array = new Uint8Array(arrayBuffer);
+    const decoder = new TextDecoder('utf-8', { fatal: false });
+    let rawText = decoder.decode(uint8Array);
+    
+    // Extract text between stream objects (basic PDF text extraction)
+    let extractedText = '';
+    const streamRegex = /stream\s*(.*?)\s*endstream/gs;
+    const matches = rawText.matchAll(streamRegex);
+    
+    for (const match of matches) {
+      const streamContent = match[1];
+      // Try to extract readable text from the stream
+      const textMatch = streamContent.match(/\((.*?)\)/g);
+      if (textMatch) {
+        textMatch.forEach(text => {
+          const cleanText = text.replace(/[()]/g, '').trim();
+          if (cleanText.length > 2 && /[a-zA-Z]/.test(cleanText)) {
+            extractedText += cleanText + ' ';
+          }
+        });
+      }
     }
 
-    const result = JSON.parse(new TextDecoder().decode(stdout));
-    
-    if (!result.success) {
-      throw new Error(result.error);
+    // Fallback: try to extract any readable text from the PDF
+    if (!extractedText.trim()) {
+      const textRegex = /\((.*?)\)/g;
+      const allMatches = rawText.matchAll(textRegex);
+      
+      for (const match of allMatches) {
+        const text = match[1];
+        if (text && text.length > 2 && /[a-zA-Z]/.test(text)) {
+          extractedText += text + ' ';
+        }
+      }
     }
+
+    // Clean up the extracted text
+    extractedText = extractedText
+      .replace(/\s+/g, ' ')
+      .replace(/[^\x20-\x7E]/g, ' ')
+      .trim();
+
+    if (!extractedText || extractedText.length < 10) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: "Could not extract readable text from this PDF. The file might be a scanned image or have non-standard formatting. Please try a different PDF with selectable text."
+      }), {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+        },
+      });
+    }
+
+    const result = {
+      success: true,
+      text: extractedText,
+      metadata: {
+        title: pdfFile.name,
+        author: 'Unknown',
+        subject: '',
+        creator: 'Unknown',
+        producer: 'Unknown',
+        page_count: 1 // We can't determine exact page count with this simple method
+      }
+    };
 
     console.log('Text extracted successfully, length:', result.text.length);
 
@@ -124,7 +106,10 @@ print(json.dumps(result))
   } catch (error) {
     console.error('Error in extract-pdf-text function:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        success: false,
+        error: `Failed to process PDF: ${error.message}. Please ensure the file is a valid PDF with extractable text.`
+      }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
