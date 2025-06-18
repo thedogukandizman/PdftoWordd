@@ -1,9 +1,11 @@
+
 import React, { useState, useRef } from 'react';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { Button } from '@/components/ui/button';
 import { Upload, Download, FileText, X } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 const PdfToWord = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -192,16 +194,29 @@ ${text.split('\n').map(line => {
     
     try {
       console.log('Starting conversion for:', selectedFile.name);
-      const extractedText = await extractTextFromPdf(selectedFile);
-      const filename = selectedFile.name.replace('.pdf', '');
       
-      // Create Word-compatible document
-      const docBlob = createWordDocument(extractedText, filename);
+      // Create FormData for the Edge Function
+      const formData = new FormData();
+      formData.append('pdf', selectedFile);
+
+      // Call the Edge Function
+      const { data, error } = await supabase.functions.invoke('pdf-to-word', {
+        body: formData,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      // The response should be a blob (Word document)
+      const blob = new Blob([data], { 
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
+      });
       
-      const url = URL.createObjectURL(docBlob);
+      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${filename}_converted.doc`;
+      a.download = `${selectedFile.name.replace('.pdf', '')}_converted.docx`;
       a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
@@ -211,7 +226,7 @@ ${text.split('\n').map(line => {
       
       toast({
         title: "Success!",
-        description: "Your PDF has been converted to Word format (.doc)"
+        description: "Your PDF has been converted to Word format (.docx)"
       });
       
     } catch (error) {

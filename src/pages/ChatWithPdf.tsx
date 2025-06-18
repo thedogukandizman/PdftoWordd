@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Upload, Send, FileText, MessageSquare, AlertCircle } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import { createAIService } from '@/services/aiService';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ChatMessage {
   type: 'user' | 'ai';
@@ -23,9 +23,6 @@ const ChatWithPdf = () => {
   const [questionsUsed, setQuestionsUsed] = useState(0);
   const [pdfMetadata, setPdfMetadata] = useState<any>(null);
   
-  // Fixed Google Gemini configuration
-  const aiService = createAIService('google', 'AIzaSyDZjVhkuboHxxvu4407juAG-2_hQZdHcKc');
-
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     
@@ -77,132 +74,47 @@ const ChatWithPdf = () => {
     }
   };
 
-  const extractPdfContent = async (file: File): Promise<{ content: string; metadata: any }> => {
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-      
-      // Use improved pdf-parse extraction
-      try {
-        const pdfParse = await import('pdf-parse/lib/pdf-parse');
-        const data = await pdfParse.default(arrayBuffer);
-        
-        const metadata = {
-          title: file.name,
-          author: data.info?.Author || 'Unknown',
-          subject: data.info?.Subject || '',
-          keywords: data.info?.Keywords || '',
-          creator: data.info?.Creator || '',
-          producer: data.info?.Producer || '',
-          creationDate: data.info?.CreationDate || null,
-          modificationDate: data.info?.ModDate || null,
-          pageCount: data.numpages,
-          fileSize: file.size
-        };
-        
-        if (data.text && data.text.trim()) {
-          return { content: data.text, metadata };
-        }
-      } catch (parseError) {
-        console.log('pdf-parse failed, trying pdfjs-dist...', parseError);
-      }
-
-      // Fallback to pdfjs-dist
-      try {
-        const pdfjsLib = await import('pdfjs-dist');
-        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js`;
-        
-        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-        const pdf = await loadingTask.promise;
-        
-        let fullText = '';
-        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-          const page = await pdf.getPage(pageNum);
-          const textContent = await page.getTextContent();
-          const pageText = textContent.items
-            .map((item: any) => item.str)
-            .join(' ');
-          fullText += `Page ${pageNum}:\n${pageText}\n\n`;
-        }
-        
-        const metadata = {
-          title: file.name,
-          author: 'Unknown',
-          pageCount: pdf.numPages,
-          fileSize: file.size
-        };
-        
-        if (fullText.trim()) {
-          return { content: fullText, metadata };
-        }
-      } catch (pdfjsError) {
-        console.log('pdfjs-dist failed:', pdfjsError);
-      }
-      
-      // Enhanced fallback
-      const metadata = {
-        title: file.name,
-        author: 'Unknown',
-        pageCount: 1,
-        fileSize: file.size
-      };
-      
-      const fallbackContent = `Document: ${file.name}
-      
-This PDF document has been uploaded and is ready for analysis. The AI can answer questions about the document structure and help with queries based on available information.
-
-File Details:
-- Name: ${file.name}
-- Size: ${(file.size / 1024 / 1024).toFixed(2)} MB
-- Type: PDF Document`;
-
-      return { content: fallbackContent, metadata };
-      
-    } catch (error) {
-      console.error('PDF parsing error:', error);
-      // Fallback to basic extraction
-      const metadata = {
-        title: file.name,
-        author: 'Unknown',
-        pageCount: 1,
-        fileSize: file.size
-      };
-      
-      const fallbackContent = `Document: ${file.name}
-      
-This PDF document has been uploaded but couldn't be fully parsed. The AI can still answer general questions about the document structure and help with basic queries.
-
-File Details:
-- Name: ${file.name}
-- Size: ${(file.size / 1024 / 1024).toFixed(2)} MB
-- Type: PDF Document`;
-
-      return { content: fallbackContent, metadata };
-    }
-  };
-
   const handleAnalyze = async () => {
     if (!selectedFile) return;
     
     setIsAnalyzing(true);
     
     try {
-      const { content, metadata } = await extractPdfContent(selectedFile);
+      console.log('Analyzing PDF:', selectedFile.name);
       
-      setPdfContent(content);
-      setPdfMetadata(metadata);
+      // Create FormData for the Edge Function
+      const formData = new FormData();
+      formData.append('pdf', selectedFile);
+
+      // Call the text extraction Edge Function
+      const { data, error } = await supabase.functions.invoke('extract-pdf-text', {
+        body: formData,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (!data.success) {
+        throw new Error(data.error);
+      }
+
+      setPdfContent(data.text);
+      setPdfMetadata(data.metadata);
       
       setTimeout(() => {
         setIsAnalyzing(false);
         setIsReady(true);
         setMessages([{
           type: 'ai',
-          content: `Hello! I've analyzed your PDF "${selectedFile?.name}".
+          content: `Hello! I've successfully analyzed your PDF "${selectedFile?.name}".
 
 📄 **Document Ready:**
-• Pages: ${metadata.pageCount}
-• Author: ${metadata.author}
+• Pages: ${data.metadata.page_count}
+• Author: ${data.metadata.author || 'Unknown'}
+• Title: ${data.metadata.title || selectedFile?.name}
 • File size: ${(selectedFile!.size / 1024 / 1024).toFixed(2)} MB
-• Status: Ready for questions
+• Text extracted: ${data.text.length.toLocaleString()} characters
 
 🤖 **AI Integration Active** - Powered by Google Gemini
 
@@ -213,12 +125,13 @@ You can now ask questions about the document content! I have access to the full 
           title: "PDF Analyzed Successfully!",
           description: "You can now ask questions about your document"
         });
-      }, 2000);
+      }, 1000);
     } catch (error) {
       setIsAnalyzing(false);
+      console.error('Error analyzing PDF:', error);
       toast({
         title: "Analysis Failed",
-        description: "Could not analyze the PDF. Please try again.",
+        description: error instanceof Error ? error.message : "Could not analyze the PDF. Please try again.",
         variant: "destructive"
       });
     }
@@ -238,26 +151,51 @@ You can now ask questions about the document content! I have access to the full 
     setCurrentMessage('');
     setQuestionsUsed(prev => prev + 1);
     
+    // Add loading message
+    const loadingMessage: ChatMessage = {
+      type: 'ai',
+      content: 'Thinking...',
+      timestamp: new Date()
+    };
+    setMessages(prev => [...prev, loadingMessage]);
+    
     try {
-      const response = await aiService.chatWithPDF({
-        pdfContent,
-        userQuestion: question
+      console.log('Sending question to AI:', question);
+      
+      const { data, error } = await supabase.functions.invoke('chat-with-pdf', {
+        body: JSON.stringify({
+          pdfContent,
+          userQuestion: question
+        })
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      // Remove loading message and add real response
+      setMessages(prev => {
+        const newMessages = [...prev];
+        newMessages[newMessages.length - 1] = {
+          type: 'ai',
+          content: data.response,
+          timestamp: new Date()
+        };
+        return newMessages;
       });
       
-      const aiResponse: ChatMessage = {
-        type: 'ai',
-        content: response,
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, aiResponse]);
-      
     } catch (error) {
-      const errorResponse: ChatMessage = {
-        type: 'ai',
-        content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, errorResponse]);
+      console.error('Error sending message:', error);
+      // Replace loading message with error
+      setMessages(prev => {
+        const newMessages = [...prev];
+        newMessages[newMessages.length - 1] = {
+          type: 'ai',
+          content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
+          timestamp: new Date()
+        };
+        return newMessages;
+      });
     }
   };
 
