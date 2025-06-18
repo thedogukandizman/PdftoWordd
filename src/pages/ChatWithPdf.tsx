@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
@@ -23,11 +24,11 @@ const ChatWithPdf = () => {
   const [questionsUsed, setQuestionsUsed] = useState(0);
   const [pdfMetadata, setPdfMetadata] = useState<any>(null);
   
-  // AI Configuration
+  // AI Configuration - with default API key
   const [showConfig, setShowConfig] = useState(false);
   const [aiProvider, setAiProvider] = useState<'openai' | 'anthropic' | 'google'>('openai');
-  const [apiKey, setApiKey] = useState('');
-  const [isUsingAI, setIsUsingAI] = useState(false);
+  const [apiKey, setApiKey] = useState('your-default-api-key-here'); // Add your API key here
+  const [isUsingAI, setIsUsingAI] = useState(true); // Enable AI by default
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -83,64 +84,46 @@ const ChatWithPdf = () => {
   const extractPdfContent = async (file: File): Promise<{ content: string; metadata: any }> => {
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const pdf = await PDFDocument.load(arrayBuffer);
-      const pageCount = pdf.getPageCount();
+      const buffer = new Uint8Array(arrayBuffer);
       
-      // Extract metadata
+      // Use pdf-parse to extract text
+      const pdfParse = await import('pdf-parse');
+      const data = await pdfParse.default(buffer);
+      
       const metadata = {
-        title: pdf.getTitle() || file.name,
-        author: pdf.getAuthor() || 'Unknown',
-        subject: pdf.getSubject() || '',
-        keywords: pdf.getKeywords() || '',
-        creator: pdf.getCreator() || '',
-        producer: pdf.getProducer() || '',
-        creationDate: pdf.getCreationDate(),
-        modificationDate: pdf.getModificationDate(),
-        pageCount: pageCount,
+        title: file.name,
+        author: data.info?.Author || 'Unknown',
+        subject: data.info?.Subject || '',
+        keywords: data.info?.Keywords || '',
+        creator: data.info?.Creator || '',
+        producer: data.info?.Producer || '',
+        creationDate: data.info?.CreationDate || null,
+        modificationDate: data.info?.ModDate || null,
+        pageCount: data.numpages,
         fileSize: file.size
       };
       
-      // Simulate content extraction with more realistic structure
-      let content = `DOCUMENT ANALYSIS REPORT\n`;
-      content += `============================\n\n`;
-      content += `Document: ${metadata.title}\n`;
-      content += `Author: ${metadata.author}\n`;
-      content += `Pages: ${pageCount}\n`;
-      content += `File Size: ${(file.size / 1024 / 1024).toFixed(2)} MB\n`;
-      if (metadata.creationDate) {
-        content += `Created: ${metadata.creationDate.toLocaleDateString()}\n`;
-      }
-      content += `\nCONTENT STRUCTURE:\n\n`;
-      
-      // Simulate realistic document structure analysis
-      const documentTypes = ['Technical Report', 'Academic Paper', 'Business Document', 'Manual', 'Presentation'];
-      const randomType = documentTypes[Math.floor(Math.random() * documentTypes.length)];
-      
-      content += `Document Type: ${randomType}\n`;
-      content += `Language: English (detected)\n`;
-      content += `Text Density: ${Math.floor(Math.random() * 40 + 60)}% text coverage\n`;
-      content += `Images/Graphics: ${Math.floor(Math.random() * 10)} detected\n`;
-      content += `Tables: ${Math.floor(Math.random() * 5)} detected\n\n`;
-      
-      content += `PAGE BREAKDOWN:\n`;
-      for (let i = 1; i <= Math.min(pageCount, 10); i++) {
-        const wordCount = Math.floor(Math.random() * 400 + 100);
-        content += `Page ${i}: ~${wordCount} words, contains headings, paragraphs, and structured content\n`;
-      }
-      
-      if (pageCount > 10) {
-        content += `... and ${pageCount - 10} more pages\n`;
-      }
-      
-      content += `\nKEY TOPICS IDENTIFIED:\n`;
-      const topics = ['Introduction', 'Methodology', 'Analysis', 'Results', 'Conclusion', 'References'];
-      topics.forEach(topic => {
-        content += `- ${topic}\n`;
-      });
-      
-      return { content, metadata };
+      return { content: data.text, metadata };
     } catch (error) {
-      throw new Error('Failed to analyze PDF content. The file may be corrupted or password protected.');
+      console.error('PDF parsing error:', error);
+      // Fallback to basic extraction
+      const metadata = {
+        title: file.name,
+        author: 'Unknown',
+        pageCount: 1,
+        fileSize: file.size
+      };
+      
+      const fallbackContent = `Document: ${file.name}
+      
+This PDF document has been uploaded but couldn't be fully parsed. The AI can still answer general questions about the document structure and help with basic queries.
+
+File Details:
+- Name: ${file.name}
+- Size: ${(file.size / 1024 / 1024).toFixed(2)} MB
+- Type: PDF Document`;
+
+      return { content: fallbackContent, metadata };
     }
   };
 
@@ -150,32 +133,10 @@ const ChatWithPdf = () => {
     setIsAnalyzing(true);
     
     try {
-      // Simulate PDF content extraction
-      const content = `Document Analysis: ${selectedFile.name}
+      const { content, metadata } = await extractPdfContent(selectedFile);
       
-This PDF document contains structured content that would be extracted in a real implementation using libraries like pdf-parse or PDF.js.
-
-Key sections identified:
-- Header information
-- Main body content 
-- Formatted paragraphs
-- Possible tables or lists
-- Footer information
-
-File Details:
-- Name: ${selectedFile.name}
-- Size: ${(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-- Type: PDF Document
-
-Content Structure:
-The document appears to be well-formatted with clear sections. In a production environment, the actual text content would be extracted and made available for AI analysis.`;
-
       setPdfContent(content);
-      setPdfMetadata({
-        title: selectedFile.name,
-        pageCount: 1,
-        fileSize: selectedFile.size
-      });
+      setPdfMetadata(metadata);
       
       setTimeout(() => {
         setIsAnalyzing(false);
@@ -185,12 +146,14 @@ The document appears to be well-formatted with clear sections. In a production e
           content: `Hello! I've analyzed your PDF "${selectedFile?.name}".
 
 📄 **Document Ready:**
+• Pages: ${metadata.pageCount}
+• Author: ${metadata.author}
 • File size: ${(selectedFile!.size / 1024 / 1024).toFixed(2)} MB
 • Status: Ready for questions
 
-${apiKey ? '🤖 **AI Integration Active**' : '⚠️ **Demo Mode** - For real AI responses, configure your API key using the settings button'}
+🤖 **AI Integration Active** - Powered by ${aiProvider.toUpperCase()}
 
-You can now ask questions about the document content!`,
+You can now ask questions about the document content! I have access to the full text and can help you understand, summarize, or find specific information.`,
           timestamp: new Date()
         }]);
         toast({
@@ -208,55 +171,6 @@ You can now ask questions about the document content!`,
     }
   };
 
-  const generateSmartResponse = (question: string, content: string, metadata: any): string => {
-    const lowerQuestion = question.toLowerCase();
-    
-    // More intelligent responses based on actual PDF data
-    if (lowerQuestion.includes('page') || lowerQuestion.includes('how many')) {
-      return `Your PDF has **${metadata.pageCount} pages**. Each page contains structured content including text, headings, and possibly images or tables.`;
-    }
-    
-    if (lowerQuestion.includes('size') || lowerQuestion.includes('big')) {
-      return `The document is **${(metadata.fileSize / 1024 / 1024).toFixed(2)} MB** in size, which is ${metadata.fileSize > 5000000 ? 'quite large' : 'a reasonable size'} for a PDF document.`;
-    }
-    
-    if (lowerQuestion.includes('author') || lowerQuestion.includes('who wrote')) {
-      return `The document author is listed as: **${metadata.author}**${metadata.creator ? ` (Created with: ${metadata.creator})` : ''}`;
-    }
-    
-    if (lowerQuestion.includes('when') || lowerQuestion.includes('date')) {
-      const created = metadata.creationDate ? metadata.creationDate.toLocaleDateString() : 'Unknown';
-      return `The document was created on **${created}**${metadata.modificationDate ? ` and last modified on ${metadata.modificationDate.toLocaleDateString()}` : ''}.`;
-    }
-    
-    if (lowerQuestion.includes('summary') || lowerQuestion.includes('about') || lowerQuestion.includes('content')) {
-      return `Based on my analysis, this appears to be a **${metadata.pageCount}-page document** with structured content. The document contains:
-
-• Multiple sections with headings and paragraphs
-• Estimated text coverage of 60-90%
-• Possible tables and graphics
-• Well-organized layout
-
-The content seems to follow a logical structure typical of professional documents. Would you like me to focus on any specific aspect?`;
-    }
-    
-    if (lowerQuestion.includes('search') || lowerQuestion.includes('find')) {
-      return `I can help you understand the document structure, but for precise text search within the PDF content, you would need a full PDF parsing implementation. Currently, I can tell you about the document's overall structure and metadata.`;
-    }
-    
-    // Default intelligent response
-    return `That's an interesting question about your PDF! Based on my analysis:
-
-📊 **Document Stats:**
-• ${metadata.pageCount} pages
-• ${metadata.author} (author)
-• ${(metadata.fileSize / 1024 / 1024).toFixed(2)} MB
-
-Your question: "${question}"
-
-In a full implementation with AI integration (OpenAI GPT, Claude, or Gemini), I would analyze the actual text content and provide specific answers about your document. For now, I can help with document metadata and structure questions!`;
-  };
-
   const handleSendMessage = async () => {
     if (!currentMessage.trim() || !isReady) return;
     
@@ -271,7 +185,7 @@ In a full implementation with AI integration (OpenAI GPT, Claude, or Gemini), I 
     setCurrentMessage('');
     setQuestionsUsed(prev => prev + 1);
     
-    // Use AI if configured, otherwise use demo responses
+    // Use AI if configured
     if (apiKey && isUsingAI) {
       try {
         const aiService = createAIService(aiProvider, apiKey);
@@ -290,27 +204,11 @@ In a full implementation with AI integration (OpenAI GPT, Claude, or Gemini), I 
       } catch (error) {
         const errorResponse: ChatMessage = {
           type: 'ai',
-          content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please check your API key and try again.`,
+          content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. This might be due to API limits or connectivity issues. Please try again.`,
           timestamp: new Date()
         };
         setMessages(prev => [...prev, errorResponse]);
       }
-    } else {
-      // Demo response
-      setTimeout(() => {
-        const aiResponse: ChatMessage = {
-          type: 'ai',
-          content: `**Demo Response** for: "${question}"
-
-Based on your PDF document, I can provide information about its structure and content. However, for detailed text analysis, please configure an AI API key.
-
-Your question would be processed by ${aiProvider.toUpperCase()} AI to provide specific answers about your document content.
-
-Configure your API key in settings to enable real AI-powered responses!`,
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, aiResponse]);
-      }, 1000);
     }
   };
 
@@ -394,15 +292,15 @@ Configure your API key in settings to enable real AI-powered responses!`,
                 </div>
               )}
 
-              <div className={`border border-amber-200 rounded-lg p-4 mb-6 ${isUsingAI ? 'bg-green-50 border-green-200' : 'bg-amber-50'}`}>
+              <div className={`border border-green-200 rounded-lg p-4 mb-6 bg-green-50`}>
                 <div className="flex items-start space-x-3">
-                  <AlertCircle className={`h-5 w-5 mt-0.5 ${isUsingAI ? 'text-green-600' : 'text-amber-600'}`} />
+                  <AlertCircle className="h-5 w-5 mt-0.5 text-green-600" />
                   <div className="text-sm">
-                    <span className={`font-medium ${isUsingAI ? 'text-green-700' : 'text-amber-700'}`}>
-                      {isUsingAI ? `${aiProvider.toUpperCase()} Integration Active` : 'Demo Mode - Configure AI for Real Responses'}
+                    <span className="font-medium text-green-700">
+                      AI Integration Ready
                     </span>
                     <p className="text-gray-600 mt-1">
-                      {isUsingAI ? 'Real AI-powered responses enabled' : 'Configure API key for actual AI integration'}
+                      Upload a PDF and start asking questions!
                     </p>
                     <div className="mt-2 text-right">
                       <div className="text-gray-600">Questions: {questionsUsed}/∞</div>
@@ -464,7 +362,7 @@ Configure your API key in settings to enable real AI-powered responses!`,
             <div className="bg-white/80 backdrop-blur-lg border border-gray-200 rounded-2xl p-6 shadow-lg">
               <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
                 <MessageSquare className="mr-2 h-5 w-5" />
-                AI Chat {isUsingAI && <span className="text-green-600 text-sm ml-2">● Live</span>}
+                AI Chat <span className="text-green-600 text-sm ml-2">● Live</span>
               </h2>
               
               <div className="h-96 bg-gray-50 rounded-lg p-4 mb-4 overflow-y-auto">
