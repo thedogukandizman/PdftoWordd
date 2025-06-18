@@ -102,12 +102,11 @@ For best results with PDF to Word conversion:
   const extractTextFromPdf = async (file: File): Promise<string> => {
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const buffer = new Uint8Array(arrayBuffer);
       
-      // Try with pdf-parse first
+      // Try with pdf-parse first - fix the import and usage
       try {
-        const pdfParse = await import('pdf-parse');
-        const data = await pdfParse.default(buffer);
+        const pdfParse = await import('pdf-parse/lib/pdf-parse');
+        const data = await pdfParse.default(arrayBuffer);
         
         if (data.text && data.text.trim()) {
           console.log('PDF text successfully extracted with pdf-parse:', data.text.length, 'characters');
@@ -117,14 +116,14 @@ For best results with PDF to Word conversion:
         console.log('pdf-parse failed, trying pdfjs-dist...', parseError);
       }
 
-      // Fallback to pdfjs-dist with proper import
+      // Fallback to pdfjs-dist with correct worker version
       try {
         const pdfjsLib = await import('pdfjs-dist');
         
-        // Set worker source
-        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
+        // Set worker source to match the pdfjs-dist version
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js`;
         
-        const loadingTask = pdfjsLib.getDocument({ data: buffer });
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
         const pdf = await loadingTask.promise;
         
         let fullText = '';

@@ -1,4 +1,3 @@
-
 // AI Service for PDF Chat Integration
 // Supports OpenAI GPT-4, Anthropic Claude, Google Gemini
 
@@ -99,7 +98,7 @@ export class AIService {
   }
 
   private async chatWithGemini(request: ChatRequest): Promise<string> {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${this.config.apiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${this.config.apiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -122,7 +121,9 @@ export class AIService {
     });
 
     if (!response.ok) {
-      throw new Error(`Google AI API error: ${response.status}`);
+      const errorData = await response.json();
+      console.error('Gemini API Error:', errorData);
+      throw new Error(`Google AI API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
     }
 
     const data = await response.json();
