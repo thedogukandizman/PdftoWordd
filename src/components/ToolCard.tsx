@@ -55,9 +55,9 @@ export const ToolCard = ({
           
           <Button 
             onClick={handleClick}
-            variant="ghost" 
-            className={`${buttonColor} hover:bg-gray-50 p-0 font-medium mb-4`}
+            className={`${buttonColor} hover:bg-gray-50 border border-gray-300 px-6 py-3 text-base font-medium mb-4 w-full`}
             disabled={!href}
+            variant="outline"
           >
             {buttonText}
           </Button>

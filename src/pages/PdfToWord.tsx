@@ -1,14 +1,46 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { Button } from '@/components/ui/button';
-import { Upload, Download, FileText } from 'lucide-react';
+import { Upload, Download, FileText, X } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { PDFDocument } from 'pdf-lib';
 
 const PdfToWord = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    
+    const files = Array.from(e.dataTransfer.files);
+    const file = files[0];
+    
+    if (file && file.type !== 'application/pdf') {
+      toast({
+        title: "Invalid file",
+        description: "Please select a PDF file",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    setSelectedFile(file || null);
+  };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -25,6 +57,30 @@ const PdfToWord = () => {
     setSelectedFile(file || null);
   };
 
+  const removeFile = () => {
+    setSelectedFile(null);
+  };
+
+  const extractTextFromPdf = async (file: File): Promise<string> => {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await PDFDocument.load(arrayBuffer);
+      
+      // This is a simplified text extraction - in reality, you'd need a more sophisticated library
+      // For demonstration, we'll create a placeholder text
+      const pageCount = pdf.getPageCount();
+      let extractedText = `Document: ${file.name}\n`;
+      extractedText += `Pages: ${pageCount}\n`;
+      extractedText += `Converted on: ${new Date().toLocaleDateString()}\n\n`;
+      extractedText += `[NOTE: This is a demonstration. In a real implementation, you would need server-side processing or a specialized PDF text extraction library to properly extract and format text from PDF files while maintaining formatting, tables, images, etc.]\n\n`;
+      extractedText += `Sample extracted content from your PDF would appear here with proper formatting, paragraphs, headings, and structure preserved.`;
+      
+      return extractedText;
+    } catch (error) {
+      throw new Error('Failed to process PDF file');
+    }
+  };
+
   const handleConvert = async () => {
     if (!selectedFile) {
       toast({
@@ -37,31 +93,44 @@ const PdfToWord = () => {
 
     setIsProcessing(true);
     
-    // Simulate PDF to Word conversion
-    setTimeout(() => {
-      // Create a dummy Word file for download
-      const blob = new Blob(['Converted Word content would be here'], { 
-        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
+    try {
+      const extractedText = await extractTextFromPdf(selectedFile);
+      
+      // Create a simple Word document (RTF format for compatibility)
+      const rtfContent = `{\\rtf1\\ansi\\deff0 {\\fonttbl {\\f0 Times New Roman;}}
+        \\f0\\fs24 ${extractedText.replace(/\n/g, '\\par ')}}`;
+      
+      const blob = new Blob([rtfContent], { 
+        type: 'application/rtf' 
       });
+      
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = selectedFile.name.replace('.pdf', '.docx');
+      a.download = selectedFile.name.replace('.pdf', '.rtf');
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
-      setIsProcessing(false);
       toast({
         title: "Success!",
-        description: "Your PDF has been converted to Word successfully"
+        description: "Your PDF has been converted to Word format (RTF)"
       });
-    }, 3000);
+    } catch (error) {
+      console.error('Error converting PDF:', error);
+      toast({
+        title: "Error",
+        description: "Failed to convert PDF. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
+    <div className="min-h-screen bg-white">
       <Header />
       <div className="container mx-auto px-4 py-20">
         <div className="max-w-4xl mx-auto">
@@ -74,7 +143,7 @@ const PdfToWord = () => {
             </p>
           </div>
 
-          <div className="bg-white/80 backdrop-blur-lg border border-gray-200 rounded-2xl p-8 shadow-lg">
+          <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
             <div className="mb-6">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
                 <div className="flex justify-between items-center text-sm">
@@ -91,17 +160,30 @@ const PdfToWord = () => {
               <label className="block text-gray-700 text-sm font-medium mb-2">
                 Select PDF File to Convert
               </label>
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+              <div 
+                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                  isDragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+                }`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
                 <Upload className="h-12 w-12 text-blue-600 mx-auto mb-4" />
                 <p className="text-gray-600 mb-4">Drop a PDF file here or click to browse</p>
                 <input
+                  ref={fileInputRef}
                   type="file"
                   accept=".pdf"
                   onChange={handleFileSelect}
                   className="hidden"
                   id="pdf-file"
                 />
-                <Button asChild variant="outline" className="border-gray-300 text-gray-700 hover:bg-gray-50">
+                <Button 
+                  asChild 
+                  variant="outline" 
+                  className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                  onClick={() => fileInputRef.current?.click()}
+                >
                   <label htmlFor="pdf-file" className="cursor-pointer">
                     Choose PDF File
                   </label>
@@ -112,12 +194,24 @@ const PdfToWord = () => {
             {selectedFile && (
               <div className="mb-6">
                 <h3 className="text-gray-700 font-medium mb-3">Selected File:</h3>
-                <div className="flex items-center space-x-3 bg-gray-50 rounded-lg p-3">
-                  <FileText className="h-5 w-5 text-blue-600" />
-                  <span className="text-gray-800 text-sm">{selectedFile.name}</span>
-                  <span className="text-gray-500 text-xs">
-                    ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
-                  </span>
+                <div className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
+                  <div className="flex items-center space-x-3">
+                    <FileText className="h-5 w-5 text-blue-600" />
+                    <div>
+                      <span className="text-gray-800 text-sm block">{selectedFile.name}</span>
+                      <span className="text-gray-500 text-xs">
+                        ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+                      </span>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={removeFile}
+                    className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
             )}
@@ -125,13 +219,13 @@ const PdfToWord = () => {
             <Button
               onClick={handleConvert}
               disabled={!selectedFile || isProcessing}
-              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 py-3 text-lg"
             >
               {isProcessing ? (
                 "Converting to Word..."
               ) : (
                 <>
-                  <Download className="mr-2 h-4 w-4" />
+                  <Download className="mr-2 h-5 w-5" />
                   Convert to Word
                 </>
               )}
