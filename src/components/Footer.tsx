@@ -14,7 +14,7 @@ export const Footer = () => {
   };
 
   return (
-    <footer className="bg-gray-100 border-t border-gray-200 py-12 px-4">
+    <footer className="bg-white border-t border-gray-100 py-12 px-4">
       <div className="container mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div>
@@ -22,7 +22,9 @@ export const Footer = () => {
               className="flex items-center space-x-2 mb-4 cursor-pointer" 
               onClick={handleLogoClick}
             >
-              <FileText className="h-8 w-8 text-blue-600" />
+              <div className="bg-blue-600 p-2 rounded-lg">
+                <FileText className="h-6 w-6 text-white" />
+              </div>
               <span className="text-2xl font-bold text-gray-800">PDFMaster</span>
             </div>
             <p className="text-gray-600 mb-4 max-w-md">
@@ -62,7 +64,7 @@ export const Footer = () => {
           </div>
         </div>
         
-        <div className="border-t border-gray-200 mt-8 pt-8 text-center text-gray-600">
+        <div className="border-t border-gray-100 mt-8 pt-8 text-center text-gray-600">
           <p>&copy; 2024 PDFMaster. All rights reserved.</p>
         </div>
       </div>

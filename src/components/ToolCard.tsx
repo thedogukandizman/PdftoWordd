@@ -9,10 +9,26 @@ interface ToolCardProps {
   title: string;
   description: string;
   color: string;
+  iconColor: string;
+  buttonText: string;
+  buttonColor: string;
+  badge?: string;
+  badgeColor?: string;
   href?: string;
 }
 
-export const ToolCard = ({ icon: Icon, title, description, color, href }: ToolCardProps) => {
+export const ToolCard = ({ 
+  icon: Icon, 
+  title, 
+  description, 
+  color, 
+  iconColor, 
+  buttonText, 
+  buttonColor, 
+  badge, 
+  badgeColor, 
+  href 
+}: ToolCardProps) => {
   const navigate = useNavigate();
 
   const handleClick = () => {
@@ -22,30 +38,37 @@ export const ToolCard = ({ icon: Icon, title, description, color, href }: ToolCa
   };
 
   return (
-    <Card className="group bg-white/10 backdrop-blur-lg border-white/20 hover:bg-white/20 transition-all duration-300 hover:scale-105 hover:shadow-2xl">
-      <CardContent className="p-6">
-        <div className="text-center">
-          <div className={`inline-flex p-4 rounded-2xl bg-gradient-to-r ${color} mb-4 group-hover:scale-110 transition-transform duration-300`}>
-            <Icon className="h-8 w-8 text-white" />
+    <Card className="bg-white border border-gray-200 hover:shadow-lg transition-all duration-300 p-6">
+      <CardContent className="p-0">
+        <div className="text-left">
+          <div className={`inline-flex p-4 rounded-2xl ${color} mb-6`}>
+            <Icon className={`h-8 w-8 ${iconColor}`} />
           </div>
           
-          <h3 className="text-xl font-semibold text-white mb-2 group-hover:text-blue-300 transition-colors">
+          <h3 className="text-xl font-semibold text-gray-800 mb-3 leading-tight">
             {title}
           </h3>
           
-          <p className="text-white/70 mb-4 text-sm leading-relaxed">
+          <p className="text-gray-600 mb-6 text-sm leading-relaxed">
             {description}
           </p>
           
           <Button 
             onClick={handleClick}
-            variant="outline" 
-            size="sm" 
-            className="border-white/20 text-white hover:bg-white/10 group-hover:border-blue-400 transition-all duration-300"
+            variant="ghost" 
+            className={`${buttonColor} hover:bg-gray-50 p-0 font-medium mb-4`}
             disabled={!href}
           >
-            {href ? "Use Tool" : "Coming Soon"}
+            {buttonText}
           </Button>
+
+          {badge && (
+            <div className="flex justify-center">
+              <span className={`${badgeColor} text-white text-xs px-3 py-1 rounded-full font-medium`}>
+                {badge}
+              </span>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
