@@ -82,38 +82,38 @@ const ChatWithPdf = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
       <Header />
       <div className="container mx-auto px-4 py-20">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-12">
-            <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
+            <h1 className="text-4xl md:text-5xl font-bold text-gray-800 mb-4">
               Chat with Your PDF
             </h1>
-            <p className="text-xl text-white/70">
+            <p className="text-xl text-gray-600">
               Upload a PDF and ask questions about its content using AI
             </p>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* File Upload Section */}
-            <div className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl p-6">
-              <h2 className="text-xl font-semibold text-white mb-4">Upload Document</h2>
+            <div className="bg-white/80 backdrop-blur-lg border border-gray-200 rounded-2xl p-6 shadow-lg">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">Upload Document</h2>
               
-              <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 mb-6">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
                 <div className="text-sm">
-                  <span className="text-blue-400 font-medium">Free Tier</span>
-                  <p className="text-white/70">3 questions per session • Max 1MB file size • One document per session</p>
+                  <span className="text-blue-600 font-medium">Free Tier</span>
+                  <p className="text-gray-600">3 questions per session • Max 1MB file size • One document per session</p>
                   <div className="mt-2 text-right">
-                    <div className="text-white/70">Questions used: 0/3</div>
-                    <div className="text-white/70">Documents: 0/1</div>
+                    <div className="text-gray-600">Questions used: 0/3</div>
+                    <div className="text-gray-600">Documents: 0/1</div>
                   </div>
                 </div>
               </div>
 
-              <div className="border-2 border-dashed border-white/30 rounded-lg p-6 text-center mb-4">
-                <Upload className="h-10 w-10 text-blue-400 mx-auto mb-3" />
-                <p className="text-white/70 mb-3">Upload PDF to start chatting</p>
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center mb-4">
+                <Upload className="h-10 w-10 text-blue-600 mx-auto mb-3" />
+                <p className="text-gray-600 mb-3">Upload PDF to start chatting</p>
                 <input
                   type="file"
                   accept=".pdf"
@@ -121,7 +121,7 @@ const ChatWithPdf = () => {
                   className="hidden"
                   id="chat-pdf-file"
                 />
-                <Button asChild variant="outline" className="border-white/20 text-white hover:bg-white/10">
+                <Button asChild variant="outline" className="border-gray-300 text-gray-700 hover:bg-gray-50">
                   <label htmlFor="chat-pdf-file" className="cursor-pointer">
                     Choose PDF File
                   </label>
@@ -130,11 +130,11 @@ const ChatWithPdf = () => {
 
               {selectedFile && (
                 <div className="mb-4">
-                  <div className="flex items-center space-x-3 bg-white/5 rounded-lg p-3 mb-4">
-                    <FileText className="h-5 w-5 text-blue-400" />
+                  <div className="flex items-center space-x-3 bg-gray-50 rounded-lg p-3 mb-4">
+                    <FileText className="h-5 w-5 text-blue-600" />
                     <div className="flex-1">
-                      <span className="text-white text-sm block">{selectedFile.name}</span>
-                      <span className="text-white/50 text-xs">
+                      <span className="text-gray-800 text-sm block">{selectedFile.name}</span>
+                      <span className="text-gray-500 text-xs">
                         ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
                       </span>
                     </div>
@@ -154,15 +154,15 @@ const ChatWithPdf = () => {
             </div>
 
             {/* Chat Section */}
-            <div className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl p-6">
-              <h2 className="text-xl font-semibold text-white mb-4 flex items-center">
+            <div className="bg-white/80 backdrop-blur-lg border border-gray-200 rounded-2xl p-6 shadow-lg">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
                 <MessageSquare className="mr-2 h-5 w-5" />
                 AI Chat
               </h2>
               
-              <div className="h-96 bg-white/5 rounded-lg p-4 mb-4 overflow-y-auto">
+              <div className="h-96 bg-gray-50 rounded-lg p-4 mb-4 overflow-y-auto">
                 {messages.length === 0 ? (
-                  <div className="text-center text-white/50 mt-20">
+                  <div className="text-center text-gray-500 mt-20">
                     {selectedFile ? (
                       isReady ? "Start asking questions about your PDF!" : "Analyze your PDF first to start chatting"
                     ) : (
@@ -180,7 +180,7 @@ const ChatWithPdf = () => {
                           className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
                             message.type === 'user'
                               ? 'bg-blue-600 text-white'
-                              : 'bg-white/10 text-white border border-white/20'
+                              : 'bg-white text-gray-800 border border-gray-200'
                           }`}
                         >
                           <p className="text-sm">{message.content}</p>
@@ -201,7 +201,7 @@ const ChatWithPdf = () => {
                   placeholder={isReady ? "Ask a question about your PDF..." : "Upload and analyze a PDF first"}
                   disabled={!isReady}
                   onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
+                  className="bg-white border-gray-300 text-gray-800 placeholder:text-gray-500"
                 />
                 <Button
                   onClick={handleSendMessage}

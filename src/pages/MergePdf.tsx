@@ -59,27 +59,27 @@ const MergePdf = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
       <Header />
       <div className="container mx-auto px-4 py-20">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">
-            <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
+            <h1 className="text-4xl md:text-5xl font-bold text-gray-800 mb-4">
               Merge PDF Files
             </h1>
-            <p className="text-xl text-white/70">
+            <p className="text-xl text-gray-600">
               Combine multiple PDF files into one document
             </p>
           </div>
 
-          <div className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl p-8">
+          <div className="bg-white/80 backdrop-blur-lg border border-gray-200 rounded-2xl p-8 shadow-lg">
             <div className="mb-6">
-              <label className="block text-white text-sm font-medium mb-2">
+              <label className="block text-gray-700 text-sm font-medium mb-2">
                 Select PDF Files to Merge
               </label>
-              <div className="border-2 border-dashed border-white/30 rounded-lg p-8 text-center">
-                <Upload className="h-12 w-12 text-blue-400 mx-auto mb-4" />
-                <p className="text-white/70 mb-4">Drop PDF files here or click to browse</p>
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                <Upload className="h-12 w-12 text-blue-600 mx-auto mb-4" />
+                <p className="text-gray-600 mb-4">Drop PDF files here or click to browse</p>
                 <input
                   type="file"
                   multiple
@@ -88,7 +88,7 @@ const MergePdf = () => {
                   className="hidden"
                   id="pdf-files"
                 />
-                <Button asChild variant="outline" className="border-white/20 text-white hover:bg-white/10">
+                <Button asChild variant="outline" className="border-gray-300 text-gray-700 hover:bg-gray-50">
                   <label htmlFor="pdf-files" className="cursor-pointer">
                     Choose PDF Files
                   </label>
@@ -98,13 +98,13 @@ const MergePdf = () => {
 
             {selectedFiles.length > 0 && (
               <div className="mb-6">
-                <h3 className="text-white font-medium mb-3">Selected Files:</h3>
+                <h3 className="text-gray-700 font-medium mb-3">Selected Files:</h3>
                 <div className="space-y-2">
                   {selectedFiles.map((file, index) => (
-                    <div key={index} className="flex items-center space-x-3 bg-white/5 rounded-lg p-3">
-                      <FileText className="h-5 w-5 text-blue-400" />
-                      <span className="text-white text-sm">{file.name}</span>
-                      <span className="text-white/50 text-xs">
+                    <div key={index} className="flex items-center space-x-3 bg-gray-50 rounded-lg p-3">
+                      <FileText className="h-5 w-5 text-blue-600" />
+                      <span className="text-gray-800 text-sm">{file.name}</span>
+                      <span className="text-gray-500 text-xs">
                         ({(file.size / 1024 / 1024).toFixed(2)} MB)
                       </span>
                     </div>

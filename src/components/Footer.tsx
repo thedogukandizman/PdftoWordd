@@ -1,55 +1,68 @@
 
-import { FileText, Mail, Twitter, Github } from "lucide-react";
+import { FileText } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 export const Footer = () => {
+  const navigate = useNavigate();
+
+  const handleLogoClick = () => {
+    navigate('/');
+  };
+
+  const handleToolClick = (path: string) => {
+    navigate(path);
+  };
+
   return (
-    <footer className="bg-black/20 backdrop-blur-lg border-t border-white/10 py-12 px-4">
+    <footer className="bg-gray-100 border-t border-gray-200 py-12 px-4">
       <div className="container mx-auto">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-          <div className="col-span-1 md:col-span-2">
-            <div className="flex items-center space-x-2 mb-4">
-              <FileText className="h-8 w-8 text-blue-400" />
-              <span className="text-2xl font-bold text-white">PDFMaster</span>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div>
+            <div 
+              className="flex items-center space-x-2 mb-4 cursor-pointer" 
+              onClick={handleLogoClick}
+            >
+              <FileText className="h-8 w-8 text-blue-600" />
+              <span className="text-2xl font-bold text-gray-800">PDFMaster</span>
             </div>
-            <p className="text-white/70 mb-4 max-w-md">
+            <p className="text-gray-600 mb-4 max-w-md">
               The most comprehensive PDF toolkit available online. Process your PDFs quickly, 
               securely, and for free.
             </p>
-            <div className="flex space-x-4">
-              <a href="#" className="text-white/70 hover:text-blue-400 transition-colors">
-                <Twitter className="h-5 w-5" />
-              </a>
-              <a href="#" className="text-white/70 hover:text-blue-400 transition-colors">
-                <Github className="h-5 w-5" />
-              </a>
-              <a href="#" className="text-white/70 hover:text-blue-400 transition-colors">
-                <Mail className="h-5 w-5" />
-              </a>
-            </div>
           </div>
           
           <div>
-            <h3 className="text-white font-semibold mb-4">Tools</h3>
+            <h3 className="text-gray-800 font-semibold mb-4">Tools</h3>
             <ul className="space-y-2">
-              <li><a href="#" className="text-white/70 hover:text-white transition-colors">Merge PDF</a></li>
-              <li><a href="#" className="text-white/70 hover:text-white transition-colors">Split PDF</a></li>
-              <li><a href="#" className="text-white/70 hover:text-white transition-colors">Compress PDF</a></li>
-              <li><a href="#" className="text-white/70 hover:text-white transition-colors">Convert PDF</a></li>
-            </ul>
-          </div>
-          
-          <div>
-            <h3 className="text-white font-semibold mb-4">Support</h3>
-            <ul className="space-y-2">
-              <li><a href="#" className="text-white/70 hover:text-white transition-colors">Help Center</a></li>
-              <li><a href="#" className="text-white/70 hover:text-white transition-colors">Privacy Policy</a></li>
-              <li><a href="#" className="text-white/70 hover:text-white transition-colors">Terms of Service</a></li>
-              <li><a href="#" className="text-white/70 hover:text-white transition-colors">Contact Us</a></li>
+              <li>
+                <button 
+                  onClick={() => handleToolClick('/merge-pdf')}
+                  className="text-gray-600 hover:text-gray-800 transition-colors text-left"
+                >
+                  Merge PDF
+                </button>
+              </li>
+              <li>
+                <button 
+                  onClick={() => handleToolClick('/pdf-to-word')}
+                  className="text-gray-600 hover:text-gray-800 transition-colors text-left"
+                >
+                  PDF to Word
+                </button>
+              </li>
+              <li>
+                <button 
+                  onClick={() => handleToolClick('/chat-with-pdf')}
+                  className="text-gray-600 hover:text-gray-800 transition-colors text-left"
+                >
+                  Chat with PDF
+                </button>
+              </li>
             </ul>
           </div>
         </div>
         
-        <div className="border-t border-white/10 mt-8 pt-8 text-center text-white/70">
+        <div className="border-t border-gray-200 mt-8 pt-8 text-center text-gray-600">
           <p>&copy; 2024 PDFMaster. All rights reserved.</p>
         </div>
       </div>
