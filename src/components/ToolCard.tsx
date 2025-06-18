@@ -2,15 +2,25 @@
 import { LucideIcon } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 
 interface ToolCardProps {
   icon: LucideIcon;
   title: string;
   description: string;
   color: string;
+  href?: string;
 }
 
-export const ToolCard = ({ icon: Icon, title, description, color }: ToolCardProps) => {
+export const ToolCard = ({ icon: Icon, title, description, color, href }: ToolCardProps) => {
+  const navigate = useNavigate();
+
+  const handleClick = () => {
+    if (href) {
+      navigate(href);
+    }
+  };
+
   return (
     <Card className="group bg-white/10 backdrop-blur-lg border-white/20 hover:bg-white/20 transition-all duration-300 hover:scale-105 hover:shadow-2xl">
       <CardContent className="p-6">
@@ -28,11 +38,13 @@ export const ToolCard = ({ icon: Icon, title, description, color }: ToolCardProp
           </p>
           
           <Button 
+            onClick={handleClick}
             variant="outline" 
             size="sm" 
             className="border-white/20 text-white hover:bg-white/10 group-hover:border-blue-400 transition-all duration-300"
+            disabled={!href}
           >
-            Use Tool
+            {href ? "Use Tool" : "Coming Soon"}
           </Button>
         </div>
       </CardContent>
