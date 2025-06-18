@@ -36,7 +36,7 @@ serve(async (req) => {
       });
     }
 
-    if (!pdfContent || pdfContent.trim().length < 20) {
+    if (!pdfContent || pdfContent.trim().length < 10) {
       return new Response(JSON.stringify({ 
         error: 'PDF content is empty or too short. The document may be scanned or contain unreadable text. Please try a different PDF with selectable text.' 
       }), {
@@ -47,7 +47,16 @@ serve(async (req) => {
 
     console.log('Processing chat request - PDF content length:', pdfContent.length);
     console.log('User question:', userQuestion);
-    console.log('PDF content preview:', pdfContent.substring(0, 500));
+    console.log('PDF content preview (first 300 chars):', pdfContent.substring(0, 300));
+
+    // Clean the PDF content before sending to Gemini
+    const cleanedContent = pdfContent
+      .replace(/[^\x20-\x7E\n\r\t]/g, ' ') // Remove non-printable chars
+      .replace(/\s+/g, ' ') // Normalize whitespace
+      .trim();
+
+    console.log('Cleaned content length:', cleanedContent.length);
+    console.log('Cleaned content preview (first 200 chars):', cleanedContent.substring(0, 200));
 
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
       method: 'POST',
@@ -61,7 +70,7 @@ serve(async (req) => {
               {
                 text: `You are an AI assistant helping users understand their PDF documents. Here is the content extracted from a PDF document:
 
-${pdfContent.substring(0, 30000)}${pdfContent.length > 30000 ? '...[content truncated]' : ''}
+${cleanedContent.substring(0, 20000)}${cleanedContent.length > 20000 ? '...[content truncated for length]' : ''}
 
 User Question: ${userQuestion}
 
@@ -102,7 +111,7 @@ Please provide a helpful and accurate answer based on the PDF content above. If 
       });
     }
 
-    console.log('AI response generated successfully');
+    console.log('AI response generated successfully, length:', aiResponse.length);
 
     return new Response(JSON.stringify({ response: aiResponse }), {
       headers: {

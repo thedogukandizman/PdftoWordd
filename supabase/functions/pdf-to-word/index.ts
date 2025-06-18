@@ -7,7 +7,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Improved PDF text extraction (same as extract-pdf-text)
+// Same improved PDF text extraction as extract-pdf-text
 async function extractPdfText(pdfBytes: Uint8Array): Promise<string> {
   try {
     const decoder = new TextDecoder('latin1');
@@ -15,39 +15,61 @@ async function extractPdfText(pdfBytes: Uint8Array): Promise<string> {
     
     let extractedText = '';
     
-    // Extract text from PDF text objects
-    const textObjectRegex = /\(([^)]+)\)\s*Tj/g;
+    // Method 1: Extract text between BT and ET operators
+    const btEtRegex = /BT\s+(.*?)\s+ET/gs;
     let match;
-    while ((match = textObjectRegex.exec(pdfString)) !== null) {
-      const text = match[1];
-      if (text && text.length > 0) {
-        const decodedText = text
-          .replace(/\\n/g, ' ')
-          .replace(/\\r/g, ' ')
-          .replace(/\\t/g, ' ')
-          .replace(/\\\(/g, '(')
-          .replace(/\\\)/g, ')')
-          .replace(/\\\\/g, '\\');
-        
-        if (/[a-zA-Z]/.test(decodedText)) {
-          extractedText += decodedText + ' ';
+    while ((match = btEtRegex.exec(pdfString)) !== null) {
+      const textBlock = match[1];
+      
+      const textMatches = [
+        ...textBlock.matchAll(/\(([^)]+)\)\s*Tj/g),
+        ...textBlock.matchAll(/\(([^)]+)\)\s*TJ/g),
+        ...textBlock.matchAll(/\[(.*?)\]\s*TJ/g)
+      ];
+      
+      for (const textMatch of textMatches) {
+        let text = textMatch[1];
+        if (text) {
+          if (text.includes('(')) {
+            const subTexts = text.match(/\(([^)]*)\)/g);
+            if (subTexts) {
+              text = subTexts.map(t => t.replace(/[()]/g, '')).join('');
+            }
+          }
+          
+          text = text
+            .replace(/\\n/g, ' ')
+            .replace(/\\r/g, ' ')
+            .replace(/\\t/g, ' ')
+            .replace(/\\\(/g, '(')
+            .replace(/\\\)/g, ')')
+            .replace(/\\\\/g, '\\')
+            .trim();
+          
+          if (text.length > 0) {
+            extractedText += text + ' ';
+          }
         }
       }
     }
     
-    // Fallback method for show text operators
-    if (extractedText.length < 50) {
-      const showTextRegex = /\[(.*?)\]\s*TJ/g;
-      while ((match = showTextRegex.exec(pdfString)) !== null) {
-        const textArray = match[1];
-        const textParts = textArray.match(/\(([^)]*)\)/g);
-        if (textParts) {
-          textParts.forEach(part => {
-            const cleanText = part.replace(/[()]/g, '');
-            if (cleanText && /[a-zA-Z]/.test(cleanText)) {
-              extractedText += cleanText + ' ';
-            }
-          });
+    // Method 2: Fallback to simple text objects
+    if (extractedText.length < 100) {
+      const textObjectRegex = /\(([^)]+)\)\s*Tj/g;
+      while ((match = textObjectRegex.exec(pdfString)) !== null) {
+        const text = match[1];
+        if (text && text.length > 0) {
+          const decodedText = text
+            .replace(/\\n/g, ' ')
+            .replace(/\\r/g, ' ')
+            .replace(/\\t/g, ' ')
+            .replace(/\\\(/g, '(')
+            .replace(/\\\)/g, ')')
+            .replace(/\\\\/g, '\\');
+          
+          if (decodedText.trim().length > 0) {
+            extractedText += decodedText + ' ';
+          }
         }
       }
     }
@@ -60,27 +82,28 @@ async function extractPdfText(pdfBytes: Uint8Array): Promise<string> {
   }
 }
 
-// Create a proper RTF document
+// Create a proper RTF document with better formatting
 function createRtfDocument(text: string, filename: string): string {
-  // Sanitize text for RTF
+  // Sanitize text for RTF - be more aggressive about cleaning
   const sanitizedText = text
-    .replace(/[^\x20-\x7E\n\r\t]/g, ' ') // Remove non-printable chars
+    .replace(/[^\x20-\x7E\n\r\t]/g, ' ') // Remove non-printable chars except basic ones
     .replace(/\\/g, '\\\\') // Escape backslashes
-    .replace(/{/g, '\\{') // Escape braces
+    .replace(/{/g, '\\{') // Escape braces  
     .replace(/}/g, '\\}') // Escape braces
     .replace(/\n/g, '\\par\n') // Convert newlines to RTF paragraphs
     .replace(/\t/g, '\\tab ') // Convert tabs
+    .replace(/\s+/g, ' ') // Normalize whitespace
     .trim();
 
-  // Create proper RTF document
-  const rtfContent = `{\\rtf1\\ansi\\deff0
-{\\fonttbl{\\f0\\froman\\fcharset0 Times New Roman;}}
-{\\colortbl;\\red0\\green0\\blue0;}
-\\viewkind4\\uc1\\pard\\cf1\\f0\\fs24
+  // Create proper RTF document with correct header
+  const rtfContent = `{\\rtf1\\ansi\\deff0 {\\fonttbl {\\f0\\froman\\fcharset0 Times New Roman;}}
+\\f0\\fs24 
 
-{\\b\\fs28 ${filename.replace(/[\\{}]/g, '')}\\par}
+{\\b\\fs28 ${filename.replace(/[\\{}]/g, '').replace('.pdf', '')}\\par}
 \\par
+
 ${sanitizedText}
+
 \\par
 }`;
 
@@ -108,10 +131,10 @@ serve(async (req) => {
     const extractedText = await extractPdfText(pdfBytes);
     
     console.log('Extracted text length:', extractedText.length);
-    console.log('Text preview:', extractedText.substring(0, 200));
+    console.log('Text preview (first 200 chars):', extractedText.substring(0, 200));
 
-    // Validate extracted text
-    if (!extractedText || extractedText.length < 20) {
+    // More lenient validation - just check if we have some text
+    if (!extractedText || extractedText.length < 10) {
       return new Response(JSON.stringify({
         success: false,
         error: "Could not extract readable text from this PDF. The file may be scanned or image-based. Please try a different PDF with selectable text."
