@@ -4,7 +4,7 @@ import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Upload, Send, FileText, MessageSquare, AlertCircle, Settings } from 'lucide-react';
+import { Upload, Send, FileText, MessageSquare, AlertCircle } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { createAIService } from '@/services/aiService';
 
@@ -24,11 +24,8 @@ const ChatWithPdf = () => {
   const [questionsUsed, setQuestionsUsed] = useState(0);
   const [pdfMetadata, setPdfMetadata] = useState<any>(null);
   
-  // AI Configuration - with default API key
-  const [showConfig, setShowConfig] = useState(false);
-  const [aiProvider, setAiProvider] = useState<'openai' | 'anthropic' | 'google'>('openai');
-  const [apiKey, setApiKey] = useState('your-default-api-key-here'); // Add your API key here
-  const [isUsingAI, setIsUsingAI] = useState(true); // Enable AI by default
+  // Fixed Google Gemini configuration
+  const aiService = createAIService('google', 'AIzaSyDZjVhkuboHxxvu4407juAG-2_hQZdHcKc');
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -151,7 +148,7 @@ File Details:
 • File size: ${(selectedFile!.size / 1024 / 1024).toFixed(2)} MB
 • Status: Ready for questions
 
-🤖 **AI Integration Active** - Powered by ${aiProvider.toUpperCase()}
+🤖 **AI Integration Active** - Powered by Google Gemini
 
 You can now ask questions about the document content! I have access to the full text and can help you understand, summarize, or find specific information.`,
           timestamp: new Date()
@@ -185,47 +182,26 @@ You can now ask questions about the document content! I have access to the full 
     setCurrentMessage('');
     setQuestionsUsed(prev => prev + 1);
     
-    // Use AI if configured
-    if (apiKey && isUsingAI) {
-      try {
-        const aiService = createAIService(aiProvider, apiKey);
-        const response = await aiService.chatWithPDF({
-          pdfContent,
-          userQuestion: question
-        });
-        
-        const aiResponse: ChatMessage = {
-          type: 'ai',
-          content: response,
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, aiResponse]);
-        
-      } catch (error) {
-        const errorResponse: ChatMessage = {
-          type: 'ai',
-          content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. This might be due to API limits or connectivity issues. Please try again.`,
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, errorResponse]);
-      }
-    }
-  };
-
-  const saveAIConfig = () => {
-    if (apiKey.trim()) {
-      setIsUsingAI(true);
-      setShowConfig(false);
-      toast({
-        title: "AI Configuration Saved",
-        description: `${aiProvider.toUpperCase()} integration activated`
+    try {
+      const response = await aiService.chatWithPDF({
+        pdfContent,
+        userQuestion: question
       });
-    } else {
-      toast({
-        title: "API Key Required",
-        description: "Please enter a valid API key",
-        variant: "destructive"
-      });
+      
+      const aiResponse: ChatMessage = {
+        type: 'ai',
+        content: response,
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, aiResponse]);
+      
+    } catch (error) {
+      const errorResponse: ChatMessage = {
+        type: 'ai',
+        content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorResponse]);
     }
   };
 
@@ -246,52 +222,8 @@ You can now ask questions about the document content! I have access to the full 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* File Upload Section */}
             <div className="bg-white/80 backdrop-blur-lg border border-gray-200 rounded-2xl p-6 shadow-lg">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold text-gray-800">Upload Document</h2>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowConfig(!showConfig)}
-                  className="text-gray-600"
-                >
-                  <Settings className="h-4 w-4 mr-1" />
-                  AI Settings
-                </Button>
-              </div>
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">Upload Document</h2>
               
-              {showConfig && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                  <h3 className="font-medium text-blue-800 mb-3">AI Configuration</h3>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">AI Provider</label>
-                      <select 
-                        value={aiProvider} 
-                        onChange={(e) => setAiProvider(e.target.value as any)}
-                        className="w-full p-2 border border-gray-300 rounded"
-                      >
-                        <option value="openai">OpenAI GPT-4</option>
-                        <option value="anthropic">Anthropic Claude</option>
-                        <option value="google">Google Gemini</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
-                      <Input
-                        type="password"
-                        value={apiKey}
-                        onChange={(e) => setApiKey(e.target.value)}
-                        placeholder="Enter your API key"
-                        className="w-full"
-                      />
-                    </div>
-                    <Button onClick={saveAIConfig} className="w-full">
-                      Save Configuration
-                    </Button>
-                  </div>
-                </div>
-              )}
-
               <div className={`border border-green-200 rounded-lg p-4 mb-6 bg-green-50`}>
                 <div className="flex items-start space-x-3">
                   <AlertCircle className="h-5 w-5 mt-0.5 text-green-600" />
@@ -300,7 +232,7 @@ You can now ask questions about the document content! I have access to the full 
                       AI Integration Ready
                     </span>
                     <p className="text-gray-600 mt-1">
-                      Upload a PDF and start asking questions!
+                      Powered by Google Gemini - Upload a PDF and start asking questions!
                     </p>
                     <div className="mt-2 text-right">
                       <div className="text-gray-600">Questions: {questionsUsed}/∞</div>
