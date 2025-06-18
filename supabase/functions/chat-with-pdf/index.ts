@@ -15,7 +15,6 @@ serve(async (req) => {
   }
 
   try {
-    // Check if Gemini API key is available
     if (!geminiApiKey) {
       console.error('GEMINI_API_KEY not found in environment variables');
       return new Response(JSON.stringify({ 
@@ -37,7 +36,7 @@ serve(async (req) => {
       });
     }
 
-    if (!pdfContent || pdfContent.trim().length < 100) {
+    if (!pdfContent || pdfContent.trim().length < 20) {
       return new Response(JSON.stringify({ 
         error: 'PDF content is empty or too short. The document may be scanned or contain unreadable text. Please try a different PDF with selectable text.' 
       }), {
@@ -46,20 +45,9 @@ serve(async (req) => {
       });
     }
 
-    // Additional validation: check if content looks like meaningful text
-    const alphanumericCount = (pdfContent.match(/[a-zA-Z0-9\s]/g) || []).length;
-    const readableRatio = alphanumericCount / pdfContent.length;
-    
-    if (readableRatio < 0.5) {
-      return new Response(JSON.stringify({ 
-        error: 'The PDF content appears to be garbled or unreadable. This often happens with scanned documents. Please try a different PDF with selectable text.' 
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    console.log('Processing chat request, PDF content length:', pdfContent.length, 'Question:', userQuestion, 'Readable ratio:', readableRatio);
+    console.log('Processing chat request - PDF content length:', pdfContent.length);
+    console.log('User question:', userQuestion);
+    console.log('PDF content preview:', pdfContent.substring(0, 500));
 
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
       method: 'POST',
@@ -73,7 +61,7 @@ serve(async (req) => {
               {
                 text: `You are an AI assistant helping users understand their PDF documents. Here is the content extracted from a PDF document:
 
-${pdfContent.substring(0, 30000)} ${pdfContent.length > 30000 ? '...[content truncated]' : ''}
+${pdfContent.substring(0, 30000)}${pdfContent.length > 30000 ? '...[content truncated]' : ''}
 
 User Question: ${userQuestion}
 
@@ -93,28 +81,12 @@ Please provide a helpful and accurate answer based on the PDF content above. If 
       const errorData = await response.json().catch(() => ({ error: { message: 'Unknown error' } }));
       console.error('Gemini API Error:', response.status, errorData);
       
-      if (response.status === 400) {
-        return new Response(JSON.stringify({ 
-          error: 'The question or PDF content contains unsupported content. Please try rephrasing your question.' 
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      } else if (response.status === 403) {
-        return new Response(JSON.stringify({ 
-          error: 'AI service access denied. Please check your API configuration.' 
-        }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      } else {
-        return new Response(JSON.stringify({ 
-          error: 'AI service is temporarily unavailable. Please try again in a moment.' 
-        }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
+      return new Response(JSON.stringify({ 
+        error: 'AI service is temporarily unavailable. Please try again in a moment.' 
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const data = await response.json();

@@ -7,102 +7,84 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Function to validate if text is readable/meaningful (same as extract function)
-function isTextReadable(text: string): boolean {
-  if (!text || text.length < 100) return false;
-  
-  const alphanumericCount = (text.match(/[a-zA-Z0-9\s]/g) || []).length;
-  const totalChars = text.length;
-  const readableRatio = alphanumericCount / totalChars;
-  
-  if (readableRatio < 0.5) return false;
-  
-  const commonWords = ['the', 'and', 'or', 'to', 'a', 'an', 'is', 'in', 'on', 'at', 'for', 'with', 'by'];
-  const lowerText = text.toLowerCase();
-  const foundWords = commonWords.filter(word => lowerText.includes(` ${word} `)).length;
-  
-  return foundWords >= 3;
-}
-
-// Function to clean and sanitize extracted text for Word document
-function sanitizeTextForWord(text: string): string {
-  return text
-    // Remove non-printable characters except newlines and tabs
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '')
-    // Replace multiple whitespace with single space, but preserve paragraphs
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\n\s*\n/g, '\n\n')
-    // Remove excessive special characters clusters
-    .replace(/[^\w\s.,!?;:()"-]{3,}/g, ' ')
-    // Escape XML special characters for Word
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;')
-    .trim();
-}
-
-// Create a proper .docx file using Open XML format
-function createDocxFile(text: string, filename: string): Uint8Array {
-  const sanitizedText = sanitizeTextForWord(text);
-  
-  // Split text into paragraphs
-  const paragraphs = sanitizedText.split('\n\n').filter(p => p.trim());
-  
-  // Create paragraph XML
-  const paragraphsXml = paragraphs.map(paragraph => {
-    const lines = paragraph.split('\n').filter(line => line.trim());
-    const linesXml = lines.map(line => 
-      `<w:r><w:t>${line.trim()}</w:t></w:r>`
-    ).join('<w:br/>');
+// Improved PDF text extraction (same as extract-pdf-text)
+async function extractPdfText(pdfBytes: Uint8Array): Promise<string> {
+  try {
+    const decoder = new TextDecoder('latin1');
+    const pdfString = decoder.decode(pdfBytes);
     
-    return `<w:p><w:pPr></w:pPr>${linesXml}</w:p>`;
-  }).join('');
+    let extractedText = '';
+    
+    // Extract text from PDF text objects
+    const textObjectRegex = /\(([^)]+)\)\s*Tj/g;
+    let match;
+    while ((match = textObjectRegex.exec(pdfString)) !== null) {
+      const text = match[1];
+      if (text && text.length > 0) {
+        const decodedText = text
+          .replace(/\\n/g, ' ')
+          .replace(/\\r/g, ' ')
+          .replace(/\\t/g, ' ')
+          .replace(/\\\(/g, '(')
+          .replace(/\\\)/g, ')')
+          .replace(/\\\\/g, '\\');
+        
+        if (/[a-zA-Z]/.test(decodedText)) {
+          extractedText += decodedText + ' ';
+        }
+      }
+    }
+    
+    // Fallback method for show text operators
+    if (extractedText.length < 50) {
+      const showTextRegex = /\[(.*?)\]\s*TJ/g;
+      while ((match = showTextRegex.exec(pdfString)) !== null) {
+        const textArray = match[1];
+        const textParts = textArray.match(/\(([^)]*)\)/g);
+        if (textParts) {
+          textParts.forEach(part => {
+            const cleanText = part.replace(/[()]/g, '');
+            if (cleanText && /[a-zA-Z]/.test(cleanText)) {
+              extractedText += cleanText + ' ';
+            }
+          });
+        }
+      }
+    }
+    
+    return extractedText.replace(/\s+/g, ' ').trim();
+    
+  } catch (error) {
+    console.error('Error in PDF text extraction:', error);
+    return '';
+  }
+}
 
-  // Document XML content
-  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-  <w:body>
-    <w:p>
-      <w:pPr>
-        <w:pStyle w:val="Title"/>
-      </w:pPr>
-      <w:r>
-        <w:rPr>
-          <w:b/>
-          <w:sz w:val="28"/>
-        </w:rPr>
-        <w:t>${filename.replace(/[<>&"']/g, '')}</w:t>
-      </w:r>
-    </w:p>
-    <w:p><w:pPr></w:pPr><w:r><w:t></w:t></w:r></w:p>
-    ${paragraphsXml}
-  </w:body>
-</w:document>`;
+// Create a proper RTF document
+function createRtfDocument(text: string, filename: string): string {
+  // Sanitize text for RTF
+  const sanitizedText = text
+    .replace(/[^\x20-\x7E\n\r\t]/g, ' ') // Remove non-printable chars
+    .replace(/\\/g, '\\\\') // Escape backslashes
+    .replace(/{/g, '\\{') // Escape braces
+    .replace(/}/g, '\\}') // Escape braces
+    .replace(/\n/g, '\\par\n') // Convert newlines to RTF paragraphs
+    .replace(/\t/g, '\\tab ') // Convert tabs
+    .trim();
 
-  // Content Types
-  const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-</Types>`;
+  // Create proper RTF document
+  const rtfContent = `{\\rtf1\\ansi\\deff0
+{\\fonttbl{\\f0\\froman\\fcharset0 Times New Roman;}}
+{\\colortbl;\\red0\\green0\\blue0;}
+\\viewkind4\\uc1\\pard\\cf1\\f0\\fs24
 
-  // Main relationships
-  const mainRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-</Relationships>`;
+{\\b\\fs28 ${filename.replace(/[\\{}]/g, '')}\\par}
+\\par
+${sanitizedText}
+\\par
+}`;
 
-  // Create a simple ZIP structure for .docx
-  const encoder = new TextEncoder();
-  
-  // This is a simplified approach - in production you'd use a proper ZIP library
-  // For now, we'll create a basic Word-compatible XML structure
-  const wordContent = encoder.encode(documentXml);
-  
-  return wordContent;
+  return rtfContent;
 }
 
 serve(async (req) => {
@@ -118,80 +100,36 @@ serve(async (req) => {
       throw new Error('No PDF file provided');
     }
 
-    console.log('Processing PDF:', pdfFile.name, 'Size:', pdfFile.size);
+    console.log('Converting PDF to Word:', pdfFile.name, 'Size:', pdfFile.size);
 
-    // Extract text using the same method as extract-pdf-text
+    // Extract text from PDF
     const arrayBuffer = await pdfFile.arrayBuffer();
-    const uint8Array = new Uint8Array(arrayBuffer);
-    const decoder = new TextDecoder('utf-8', { fatal: false });
-    let rawText = decoder.decode(uint8Array);
+    const pdfBytes = new Uint8Array(arrayBuffer);
+    const extractedText = await extractPdfText(pdfBytes);
     
-    // Extract text between stream objects
-    let extractedText = '';
-    const streamRegex = /stream\s*(.*?)\s*endstream/gs;
-    const matches = rawText.matchAll(streamRegex);
-    
-    for (const match of matches) {
-      const streamContent = match[1];
-      const textMatch = streamContent.match(/\((.*?)\)/g);
-      if (textMatch) {
-        textMatch.forEach(text => {
-          const cleanText = text.replace(/[()]/g, '').trim();
-          if (cleanText.length > 2 && /[a-zA-Z]/.test(cleanText)) {
-            extractedText += cleanText + ' ';
-          }
-        });
-      }
-    }
+    console.log('Extracted text length:', extractedText.length);
+    console.log('Text preview:', extractedText.substring(0, 200));
 
-    // Fallback text extraction
-    if (!extractedText.trim()) {
-      const textRegex = /\((.*?)\)/g;
-      const allMatches = rawText.matchAll(textRegex);
-      
-      for (const match of allMatches) {
-        const text = match[1];
-        if (text && text.length > 2 && /[a-zA-Z]/.test(text)) {
-          extractedText += text + ' ';
-        }
-      }
-    }
-
-    // Clean up the extracted text
-    extractedText = extractedText
-      .replace(/\s+/g, ' ')
-      .replace(/[^\x20-\x7E\n\r\t]/g, ' ')
-      .trim();
-
-    // Validate if the text is readable
-    if (!isTextReadable(extractedText)) {
+    // Validate extracted text
+    if (!extractedText || extractedText.length < 20) {
       return new Response(JSON.stringify({
         success: false,
-        error: "The PDF seems scanned or unreadable. Cannot generate a meaningful Word document from this content. Please try a different PDF with selectable text."
+        error: "Could not extract readable text from this PDF. The file may be scanned or image-based. Please try a different PDF with selectable text."
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Create a proper Word document
+    // Create RTF document
     const filename = pdfFile.name.replace('.pdf', '');
+    const rtfContent = createRtfDocument(extractedText, filename);
     
-    // For now, create a simple RTF that Word can open reliably
-    const rtfContent = `{\\rtf1\\ansi\\deff0
-{\\fonttbl{\\f0\\froman\\fcharset0 Times New Roman;}}
-{\\colortbl;\\red0\\green0\\blue0;}
-\\f0\\fs24
-{\\b\\fs32 ${filename}\\par}
-\\par
-${extractedText.split('\n').map(line => line.trim()).filter(line => line).join('\\par\n')}
-}`;
-
-    // Convert RTF to bytes
+    console.log('RTF document created, length:', rtfContent.length);
+    
+    // Convert to base64
     const rtfBytes = new TextEncoder().encode(rtfContent);
     const base64Content = btoa(String.fromCharCode(...rtfBytes));
-
-    console.log('Document conversion completed successfully, length:', extractedText.length);
 
     return new Response(JSON.stringify({
       success: true,
@@ -210,7 +148,7 @@ ${extractedText.split('\n').map(line => line.trim()).filter(line => line).join('
     return new Response(
       JSON.stringify({ 
         success: false,
-        error: `Conversion failed: ${error.message}. Please ensure the file is a valid PDF with extractable text.`
+        error: `PDF to Word conversion failed: ${error.message}. Please try a different PDF file.`
       }),
       {
         status: 500,

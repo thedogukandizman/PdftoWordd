@@ -7,37 +7,111 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Function to validate if text is readable/meaningful
-function isTextReadable(text: string): boolean {
-  if (!text || text.length < 100) return false;
+// Improved PDF text extraction using multiple methods
+async function extractPdfText(pdfBytes: Uint8Array): Promise<string> {
+  console.log('Starting PDF text extraction, size:', pdfBytes.length);
   
-  // Check for meaningful character ratio
-  const alphanumericCount = (text.match(/[a-zA-Z0-9\s]/g) || []).length;
-  const totalChars = text.length;
-  const readableRatio = alphanumericCount / totalChars;
-  
-  // If less than 50% of characters are readable, reject
-  if (readableRatio < 0.5) return false;
-  
-  // Check for common words that indicate real text
-  const commonWords = ['the', 'and', 'or', 'to', 'a', 'an', 'is', 'in', 'on', 'at', 'for', 'with', 'by'];
-  const lowerText = text.toLowerCase();
-  const foundWords = commonWords.filter(word => lowerText.includes(` ${word} `)).length;
-  
-  // Should have at least 3 common words in readable text
-  return foundWords >= 3;
+  try {
+    // Convert to string for pattern matching
+    const decoder = new TextDecoder('latin1');
+    const pdfString = decoder.decode(pdfBytes);
+    
+    console.log('PDF converted to string, length:', pdfString.length);
+    
+    let extractedText = '';
+    
+    // Method 1: Extract text from PDF text objects
+    const textObjectRegex = /\(([^)]+)\)\s*Tj/g;
+    let match;
+    while ((match = textObjectRegex.exec(pdfString)) !== null) {
+      const text = match[1];
+      if (text && text.length > 0) {
+        // Decode common PDF escape sequences
+        const decodedText = text
+          .replace(/\\n/g, ' ')
+          .replace(/\\r/g, ' ')
+          .replace(/\\t/g, ' ')
+          .replace(/\\\(/g, '(')
+          .replace(/\\\)/g, ')')
+          .replace(/\\\\/g, '\\');
+        
+        if (/[a-zA-Z]/.test(decodedText)) {
+          extractedText += decodedText + ' ';
+        }
+      }
+    }
+    
+    console.log('Method 1 extracted text length:', extractedText.length);
+    
+    // Method 2: Extract from show text operators
+    if (extractedText.length < 50) {
+      const showTextRegex = /\[(.*?)\]\s*TJ/g;
+      while ((match = showTextRegex.exec(pdfString)) !== null) {
+        const textArray = match[1];
+        const textParts = textArray.match(/\(([^)]*)\)/g);
+        if (textParts) {
+          textParts.forEach(part => {
+            const cleanText = part.replace(/[()]/g, '');
+            if (cleanText && /[a-zA-Z]/.test(cleanText)) {
+              extractedText += cleanText + ' ';
+            }
+          });
+        }
+      }
+      console.log('Method 2 total extracted text length:', extractedText.length);
+    }
+    
+    // Method 3: Extract from stream content (fallback)
+    if (extractedText.length < 50) {
+      const streamRegex = /stream\s*([\s\S]*?)\s*endstream/gi;
+      while ((match = streamRegex.exec(pdfString)) !== null) {
+        const streamContent = match[1];
+        
+        // Look for parentheses-enclosed text in streams
+        const textInParens = streamContent.match(/\(([^)]+)\)/g);
+        if (textInParens) {
+          textInParens.forEach(text => {
+            const cleanText = text.replace(/[()]/g, '').trim();
+            if (cleanText.length > 1 && /[a-zA-Z]/.test(cleanText)) {
+              extractedText += cleanText + ' ';
+            }
+          });
+        }
+      }
+      console.log('Method 3 total extracted text length:', extractedText.length);
+    }
+    
+    // Clean up the extracted text
+    extractedText = extractedText
+      .replace(/\s+/g, ' ')
+      .replace(/[^\x20-\x7E\n\r\t]/g, ' ')
+      .trim();
+    
+    console.log('Final cleaned text length:', extractedText.length);
+    console.log('First 200 chars of extracted text:', extractedText.substring(0, 200));
+    
+    return extractedText;
+    
+  } catch (error) {
+    console.error('Error in PDF text extraction:', error);
+    return '';
+  }
 }
 
-// Function to clean and sanitize extracted text
-function sanitizeText(text: string): string {
-  return text
-    // Remove non-printable characters except newlines and tabs
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '')
-    // Replace multiple whitespace with single space
-    .replace(/\s+/g, ' ')
-    // Remove excessive special characters clusters
-    .replace(/[^\w\s.,!?;:()"-]{3,}/g, ' ')
-    .trim();
+// Simple validation - check if text looks readable
+function validateExtractedText(text: string): boolean {
+  if (!text || text.length < 20) {
+    console.log('Text too short:', text.length);
+    return false;
+  }
+  
+  // Check for reasonable character distribution
+  const alphanumeric = text.match(/[a-zA-Z0-9]/g) || [];
+  const ratio = alphanumeric.length / text.length;
+  
+  console.log('Text validation - length:', text.length, 'alphanumeric ratio:', ratio);
+  
+  return ratio > 0.3; // At least 30% should be letters/numbers
 }
 
 serve(async (req) => {
@@ -53,56 +127,22 @@ serve(async (req) => {
       throw new Error('No PDF file provided');
     }
 
-    console.log('Extracting text from PDF:', pdfFile.name, 'Size:', pdfFile.size);
+    console.log('Processing PDF:', pdfFile.name, 'Size:', pdfFile.size);
 
-    // Convert file to ArrayBuffer for processing
+    // Convert file to bytes
     const arrayBuffer = await pdfFile.arrayBuffer();
+    const pdfBytes = new Uint8Array(arrayBuffer);
     
-    // Simple PDF text extraction using basic PDF parsing
-    const uint8Array = new Uint8Array(arrayBuffer);
-    const decoder = new TextDecoder('utf-8', { fatal: false });
-    let rawText = decoder.decode(uint8Array);
+    // Extract text using improved method
+    const extractedText = await extractPdfText(pdfBytes);
     
-    // Extract text between stream objects (basic PDF text extraction)
-    let extractedText = '';
-    const streamRegex = /stream\s*(.*?)\s*endstream/gs;
-    const matches = rawText.matchAll(streamRegex);
+    console.log('Extracted text preview:', extractedText.substring(0, 500));
     
-    for (const match of matches) {
-      const streamContent = match[1];
-      // Try to extract readable text from the stream
-      const textMatch = streamContent.match(/\((.*?)\)/g);
-      if (textMatch) {
-        textMatch.forEach(text => {
-          const cleanText = text.replace(/[()]/g, '').trim();
-          if (cleanText.length > 2 && /[a-zA-Z]/.test(cleanText)) {
-            extractedText += cleanText + ' ';
-          }
-        });
-      }
-    }
-
-    // Fallback: try to extract any readable text from the PDF
-    if (!extractedText.trim()) {
-      const textRegex = /\((.*?)\)/g;
-      const allMatches = rawText.matchAll(textRegex);
-      
-      for (const match of allMatches) {
-        const text = match[1];
-        if (text && text.length > 2 && /[a-zA-Z]/.test(text)) {
-          extractedText += text + ' ';
-        }
-      }
-    }
-
-    // Clean and sanitize the extracted text
-    extractedText = sanitizeText(extractedText);
-
-    // Validate if the text is readable and meaningful
-    if (!isTextReadable(extractedText)) {
+    // Validate the text
+    if (!validateExtractedText(extractedText)) {
       return new Response(JSON.stringify({
         success: false,
-        error: "The PDF seems scanned or unreadable. The extracted text appears to be garbled or contains mostly non-text content. Please try a different PDF with selectable text, or use an OCR tool to convert scanned documents first."
+        error: "Could not extract readable text from this PDF. The file may be scanned, image-based, or protected. Please try a different PDF with selectable text."
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -120,12 +160,12 @@ serve(async (req) => {
         producer: 'Unknown',
         page_count: 1,
         character_count: extractedText.length,
-        readable_ratio: (extractedText.match(/[a-zA-Z0-9\s]/g) || []).length / extractedText.length
+        readable_ratio: (extractedText.match(/[a-zA-Z0-9]/g) || []).length / extractedText.length
       }
     };
 
-    console.log('Text extracted successfully, length:', result.text.length, 'readable ratio:', result.metadata.readable_ratio);
-
+    console.log('Successfully extracted text, length:', result.text.length);
+    
     return new Response(JSON.stringify(result), {
       headers: {
         ...corsHeaders,
@@ -138,7 +178,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: false,
-        error: `Failed to process PDF: ${error.message}. Please ensure the file is a valid PDF with extractable text.`
+        error: `PDF processing failed: ${error.message}. Please ensure the file is a valid PDF.`
       }),
       {
         status: 500,
