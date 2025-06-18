@@ -71,3 +71,17 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+
+# PdftoWordd
+
+## Local Development
+
+After running `npm run dev`, open [http://localhost:8080/PdftoWordd/](http://localhost:8080/PdftoWordd/) in your browser.
+
+## GitHub Pages
+
+If deploying to GitHub Pages, your site will be available at:
+
+    https://<your-username>.github.io/PdftoWordd/
+
+Make sure the Vite `base` config is set to `/PdftoWordd/`.

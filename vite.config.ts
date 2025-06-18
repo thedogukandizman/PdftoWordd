@@ -21,5 +21,5 @@ export default defineConfig(({ mode }) => ({
   define: {
     'process.env.NODE_ENV': '"production"',
   },
-  base: '/PdftoWordd/', // ✅ This must match your GitHub repo name exactly
+  base: '/PdftoWordd/', // This must match your deployment path and repo name
 }));
