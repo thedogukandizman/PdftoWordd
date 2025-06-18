@@ -208,15 +208,25 @@ ${text.split('\n').map(line => {
         throw error;
       }
 
-      // The response should be a blob (Word document)
-      const blob = new Blob([data], { 
-        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
+      if (!data.success) {
+        throw new Error(data.error);
+      }
+
+      // Convert base64 to blob
+      const binaryString = atob(data.wordDocument);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      const blob = new Blob([bytes], { 
+        type: data.contentType || 'application/rtf'
       });
       
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${selectedFile.name.replace('.pdf', '')}_converted.docx`;
+      a.download = data.filename || `${selectedFile.name.replace('.pdf', '')}_converted.rtf`;
       a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
@@ -226,13 +236,13 @@ ${text.split('\n').map(line => {
       
       toast({
         title: "Success!",
-        description: "Your PDF has been converted to Word format (.docx)"
+        description: "Your PDF has been converted to Word format and downloaded"
       });
       
     } catch (error) {
       console.error('Error converting PDF:', error);
       toast({
-        title: "Error",
+        title: "Conversion Failed",
         description: error instanceof Error ? error.message : "Failed to convert PDF. Please try again.",
         variant: "destructive"
       });

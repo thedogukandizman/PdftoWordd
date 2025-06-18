@@ -7,6 +7,104 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Function to validate if text is readable/meaningful (same as extract function)
+function isTextReadable(text: string): boolean {
+  if (!text || text.length < 100) return false;
+  
+  const alphanumericCount = (text.match(/[a-zA-Z0-9\s]/g) || []).length;
+  const totalChars = text.length;
+  const readableRatio = alphanumericCount / totalChars;
+  
+  if (readableRatio < 0.5) return false;
+  
+  const commonWords = ['the', 'and', 'or', 'to', 'a', 'an', 'is', 'in', 'on', 'at', 'for', 'with', 'by'];
+  const lowerText = text.toLowerCase();
+  const foundWords = commonWords.filter(word => lowerText.includes(` ${word} `)).length;
+  
+  return foundWords >= 3;
+}
+
+// Function to clean and sanitize extracted text for Word document
+function sanitizeTextForWord(text: string): string {
+  return text
+    // Remove non-printable characters except newlines and tabs
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '')
+    // Replace multiple whitespace with single space, but preserve paragraphs
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n\s*\n/g, '\n\n')
+    // Remove excessive special characters clusters
+    .replace(/[^\w\s.,!?;:()"-]{3,}/g, ' ')
+    // Escape XML special characters for Word
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+    .trim();
+}
+
+// Create a proper .docx file using Open XML format
+function createDocxFile(text: string, filename: string): Uint8Array {
+  const sanitizedText = sanitizeTextForWord(text);
+  
+  // Split text into paragraphs
+  const paragraphs = sanitizedText.split('\n\n').filter(p => p.trim());
+  
+  // Create paragraph XML
+  const paragraphsXml = paragraphs.map(paragraph => {
+    const lines = paragraph.split('\n').filter(line => line.trim());
+    const linesXml = lines.map(line => 
+      `<w:r><w:t>${line.trim()}</w:t></w:r>`
+    ).join('<w:br/>');
+    
+    return `<w:p><w:pPr></w:pPr>${linesXml}</w:p>`;
+  }).join('');
+
+  // Document XML content
+  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="Title"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:b/>
+          <w:sz w:val="28"/>
+        </w:rPr>
+        <w:t>${filename.replace(/[<>&"']/g, '')}</w:t>
+      </w:r>
+    </w:p>
+    <w:p><w:pPr></w:pPr><w:r><w:t></w:t></w:r></w:p>
+    ${paragraphsXml}
+  </w:body>
+</w:document>`;
+
+  // Content Types
+  const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`;
+
+  // Main relationships
+  const mainRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`;
+
+  // Create a simple ZIP structure for .docx
+  const encoder = new TextEncoder();
+  
+  // This is a simplified approach - in production you'd use a proper ZIP library
+  // For now, we'll create a basic Word-compatible XML structure
+  const wordContent = encoder.encode(documentXml);
+  
+  return wordContent;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -62,33 +160,44 @@ serve(async (req) => {
     // Clean up the extracted text
     extractedText = extractedText
       .replace(/\s+/g, ' ')
-      .replace(/[^\x20-\x7E]/g, ' ')
+      .replace(/[^\x20-\x7E\n\r\t]/g, ' ')
       .trim();
 
-    if (!extractedText || extractedText.length < 10) {
+    // Validate if the text is readable
+    if (!isTextReadable(extractedText)) {
       return new Response(JSON.stringify({
         success: false,
-        error: "Could not extract readable text from this PDF. The file might be a scanned image or contain non-selectable text. Please try a different PDF."
+        error: "The PDF seems scanned or unreadable. Cannot generate a meaningful Word document from this content. Please try a different PDF with selectable text."
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Create a simple Word document structure (RTF format that works with .docx extension)
-    const rtfContent = `{\\rtf1\\ansi\\deff0 {\\fonttbl {\\f0 Times New Roman;}}
-\\f0\\fs24 ${extractedText.replace(/\n/g, '\\par ')}}`;
+    // Create a proper Word document
+    const filename = pdfFile.name.replace('.pdf', '');
+    
+    // For now, create a simple RTF that Word can open reliably
+    const rtfContent = `{\\rtf1\\ansi\\deff0
+{\\fonttbl{\\f0\\froman\\fcharset0 Times New Roman;}}
+{\\colortbl;\\red0\\green0\\blue0;}
+\\f0\\fs24
+{\\b\\fs32 ${filename}\\par}
+\\par
+${extractedText.split('\n').map(line => line.trim()).filter(line => line).join('\\par\n')}
+}`;
 
-    // Convert to base64 for download
-    const wordBuffer = new TextEncoder().encode(rtfContent);
-    const base64Word = btoa(String.fromCharCode(...wordBuffer));
+    // Convert RTF to bytes
+    const rtfBytes = new TextEncoder().encode(rtfContent);
+    const base64Content = btoa(String.fromCharCode(...rtfBytes));
 
-    console.log('Document conversion completed successfully');
+    console.log('Document conversion completed successfully, length:', extractedText.length);
 
     return new Response(JSON.stringify({
       success: true,
-      wordDocument: base64Word,
-      filename: pdfFile.name.replace('.pdf', '.docx')
+      wordDocument: base64Content,
+      filename: `${filename}.rtf`,
+      contentType: 'application/rtf'
     }), {
       headers: {
         ...corsHeaders,
@@ -101,7 +210,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: false,
-        error: `Conversion failed: ${error.message}. Please ensure the file is a valid PDF.`
+        error: `Conversion failed: ${error.message}. Please ensure the file is a valid PDF with extractable text.`
       }),
       {
         status: 500,

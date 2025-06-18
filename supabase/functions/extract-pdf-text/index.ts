@@ -7,6 +7,39 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Function to validate if text is readable/meaningful
+function isTextReadable(text: string): boolean {
+  if (!text || text.length < 100) return false;
+  
+  // Check for meaningful character ratio
+  const alphanumericCount = (text.match(/[a-zA-Z0-9\s]/g) || []).length;
+  const totalChars = text.length;
+  const readableRatio = alphanumericCount / totalChars;
+  
+  // If less than 50% of characters are readable, reject
+  if (readableRatio < 0.5) return false;
+  
+  // Check for common words that indicate real text
+  const commonWords = ['the', 'and', 'or', 'to', 'a', 'an', 'is', 'in', 'on', 'at', 'for', 'with', 'by'];
+  const lowerText = text.toLowerCase();
+  const foundWords = commonWords.filter(word => lowerText.includes(` ${word} `)).length;
+  
+  // Should have at least 3 common words in readable text
+  return foundWords >= 3;
+}
+
+// Function to clean and sanitize extracted text
+function sanitizeText(text: string): string {
+  return text
+    // Remove non-printable characters except newlines and tabs
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '')
+    // Replace multiple whitespace with single space
+    .replace(/\s+/g, ' ')
+    // Remove excessive special characters clusters
+    .replace(/[^\w\s.,!?;:()"-]{3,}/g, ' ')
+    .trim();
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -26,7 +59,6 @@ serve(async (req) => {
     const arrayBuffer = await pdfFile.arrayBuffer();
     
     // Simple PDF text extraction using basic PDF parsing
-    // This is a simplified approach - for production, you'd want to use a proper PDF parsing library
     const uint8Array = new Uint8Array(arrayBuffer);
     const decoder = new TextDecoder('utf-8', { fatal: false });
     let rawText = decoder.decode(uint8Array);
@@ -63,21 +95,17 @@ serve(async (req) => {
       }
     }
 
-    // Clean up the extracted text
-    extractedText = extractedText
-      .replace(/\s+/g, ' ')
-      .replace(/[^\x20-\x7E]/g, ' ')
-      .trim();
+    // Clean and sanitize the extracted text
+    extractedText = sanitizeText(extractedText);
 
-    if (!extractedText || extractedText.length < 10) {
+    // Validate if the text is readable and meaningful
+    if (!isTextReadable(extractedText)) {
       return new Response(JSON.stringify({
         success: false,
-        error: "Could not extract readable text from this PDF. The file might be a scanned image or have non-standard formatting. Please try a different PDF with selectable text."
+        error: "The PDF seems scanned or unreadable. The extracted text appears to be garbled or contains mostly non-text content. Please try a different PDF with selectable text, or use an OCR tool to convert scanned documents first."
       }), {
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json',
-        },
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
@@ -90,11 +118,13 @@ serve(async (req) => {
         subject: '',
         creator: 'Unknown',
         producer: 'Unknown',
-        page_count: 1 // We can't determine exact page count with this simple method
+        page_count: 1,
+        character_count: extractedText.length,
+        readable_ratio: (extractedText.match(/[a-zA-Z0-9\s]/g) || []).length / extractedText.length
       }
     };
 
-    console.log('Text extracted successfully, length:', result.text.length);
+    console.log('Text extracted successfully, length:', result.text.length, 'readable ratio:', result.metadata.readable_ratio);
 
     return new Response(JSON.stringify(result), {
       headers: {

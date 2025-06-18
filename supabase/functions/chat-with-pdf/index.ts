@@ -37,16 +37,29 @@ serve(async (req) => {
       });
     }
 
-    if (!pdfContent || pdfContent.trim().length < 10) {
+    if (!pdfContent || pdfContent.trim().length < 100) {
       return new Response(JSON.stringify({ 
-        error: 'PDF content is empty or too short. Please upload a PDF with extractable text and try again.' 
+        error: 'PDF content is empty or too short. The document may be scanned or contain unreadable text. Please try a different PDF with selectable text.' 
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    console.log('Processing chat request, PDF content length:', pdfContent.length, 'Question:', userQuestion);
+    // Additional validation: check if content looks like meaningful text
+    const alphanumericCount = (pdfContent.match(/[a-zA-Z0-9\s]/g) || []).length;
+    const readableRatio = alphanumericCount / pdfContent.length;
+    
+    if (readableRatio < 0.5) {
+      return new Response(JSON.stringify({ 
+        error: 'The PDF content appears to be garbled or unreadable. This often happens with scanned documents. Please try a different PDF with selectable text.' 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    console.log('Processing chat request, PDF content length:', pdfContent.length, 'Question:', userQuestion, 'Readable ratio:', readableRatio);
 
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
       method: 'POST',
