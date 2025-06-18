@@ -59,6 +59,9 @@ const PdfToWord = () => {
 
   const removeFile = () => {
     setSelectedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const extractTextFromPdf = async (file: File): Promise<string> => {
@@ -66,18 +69,30 @@ const PdfToWord = () => {
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await PDFDocument.load(arrayBuffer);
       
-      // This is a simplified text extraction - in reality, you'd need a more sophisticated library
-      // For demonstration, we'll create a placeholder text
+      // Enhanced text extraction simulation
       const pageCount = pdf.getPageCount();
       let extractedText = `Document: ${file.name}\n`;
-      extractedText += `Pages: ${pageCount}\n`;
-      extractedText += `Converted on: ${new Date().toLocaleDateString()}\n\n`;
-      extractedText += `[NOTE: This is a demonstration. In a real implementation, you would need server-side processing or a specialized PDF text extraction library to properly extract and format text from PDF files while maintaining formatting, tables, images, etc.]\n\n`;
-      extractedText += `Sample extracted content from your PDF would appear here with proper formatting, paragraphs, headings, and structure preserved.`;
+      extractedText += `Total Pages: ${pageCount}\n`;
+      extractedText += `Conversion Date: ${new Date().toLocaleDateString()}\n`;
+      extractedText += `File Size: ${(file.size / 1024 / 1024).toFixed(2)} MB\n\n`;
+      
+      // Simulate extracted content for each page
+      for (let i = 1; i <= Math.min(pageCount, 5); i++) {
+        extractedText += `=== PAGE ${i} ===\n\n`;
+        extractedText += `This is simulated text content from page ${i} of your PDF document. `;
+        extractedText += `In a real implementation, this would contain the actual text extracted from the PDF, `;
+        extractedText += `including paragraphs, headings, bullet points, and other formatted content.\n\n`;
+        extractedText += `Sample paragraph content would appear here with proper spacing and formatting. `;
+        extractedText += `Tables, lists, and other structured content would be preserved as much as possible.\n\n`;
+      }
+      
+      if (pageCount > 5) {
+        extractedText += `\n[NOTE: This demo version only processes the first 5 pages. The full document has ${pageCount} pages.]\n`;
+      }
       
       return extractedText;
     } catch (error) {
-      throw new Error('Failed to process PDF file');
+      throw new Error('Failed to process PDF file. The file may be corrupted or password protected.');
     }
   };
 
@@ -96,9 +111,17 @@ const PdfToWord = () => {
     try {
       const extractedText = await extractTextFromPdf(selectedFile);
       
-      // Create a simple Word document (RTF format for compatibility)
-      const rtfContent = `{\\rtf1\\ansi\\deff0 {\\fonttbl {\\f0 Times New Roman;}}
-        \\f0\\fs24 ${extractedText.replace(/\n/g, '\\par ')}}`;
+      // Create a proper RTF document with better formatting
+      const rtfContent = `{\\rtf1\\ansi\\deff0
+{\\fonttbl
+{\\f0 Times New Roman;}
+{\\f1 Arial;}
+}
+{\\colortbl;\\red0\\green0\\blue0;\\red0\\green0\\blue255;}
+\\f0\\fs24
+\\b\\fs28 PDF to Word Conversion\\b0\\fs24\\par
+\\par
+${extractedText.replace(/\n/g, '\\par ')}}`;
       
       const blob = new Blob([rtfContent], { 
         type: 'application/rtf' 
@@ -107,9 +130,12 @@ const PdfToWord = () => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = selectedFile.name.replace('.pdf', '.rtf');
+      a.download = selectedFile.name.replace('.pdf', '_converted.rtf');
+      a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
+      
+      // Clean up
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
@@ -117,11 +143,18 @@ const PdfToWord = () => {
         title: "Success!",
         description: "Your PDF has been converted to Word format (RTF)"
       });
+      
+      // Reset the form
+      setSelectedFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      
     } catch (error) {
       console.error('Error converting PDF:', error);
       toast({
         title: "Error",
-        description: "Failed to convert PDF. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to convert PDF. Please try again.",
         variant: "destructive"
       });
     } finally {

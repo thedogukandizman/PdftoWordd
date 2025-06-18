@@ -73,24 +73,48 @@ const MergePdf = () => {
     setIsProcessing(true);
     
     try {
+      // Create a new PDF document
       const mergedPdf = await PDFDocument.create();
 
+      // Process each file
       for (const file of selectedFiles) {
-        const arrayBuffer = await file.arrayBuffer();
-        const pdf = await PDFDocument.load(arrayBuffer);
-        const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
-        copiedPages.forEach((page) => mergedPdf.addPage(page));
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await PDFDocument.load(arrayBuffer);
+          const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+          copiedPages.forEach((page) => mergedPdf.addPage(page));
+        } catch (fileError) {
+          console.error(`Error processing file ${file.name}:`, fileError);
+          toast({
+            title: "File Error",
+            description: `Could not process ${file.name}. It may be corrupted or password protected.`,
+            variant: "destructive"
+          });
+          setIsProcessing(false);
+          return;
+        }
       }
 
-      const pdfBytes = await mergedPdf.save();
-      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
+      // Save the merged PDF with proper metadata
+      const pdfBytes = await mergedPdf.save({
+        useObjectStreams: false,
+        addDefaultPage: false
+      });
+
+      // Create and download the file
+      const blob = new Blob([pdfBytes], { 
+        type: 'application/pdf' 
+      });
       
+      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'merged-document.pdf';
+      a.download = `merged-document-${Date.now()}.pdf`;
+      a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
+      
+      // Clean up
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
@@ -98,11 +122,18 @@ const MergePdf = () => {
         title: "Success!",
         description: "Your PDFs have been merged successfully"
       });
+      
+      // Reset the form
+      setSelectedFiles([]);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      
     } catch (error) {
       console.error('Error merging PDFs:', error);
       toast({
         title: "Error",
-        description: "Failed to merge PDFs. Please try again.",
+        description: "Failed to merge PDFs. Please ensure all files are valid PDF documents.",
         variant: "destructive"
       });
     } finally {
