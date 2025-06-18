@@ -21,5 +21,5 @@ export default defineConfig(({ mode }) => ({
   define: {
     'process.env.NODE_ENV': '"production"',
   },
-  base: '/PdftoWordd/', // This must match your deployment path and repo name
+  base: '/', // Use root base for Vercel and most static hosts
 }));
